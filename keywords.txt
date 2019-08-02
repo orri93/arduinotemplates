@@ -1,0 +1,21 @@
+#######################################
+# Syntax Coloring Map MedianFilter
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+SinLed	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+initialize	KEYWORD2
+setat KEYWORD2
+setstep KEYWORD2
+cycle KEYWORD2
+fullcycle KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
