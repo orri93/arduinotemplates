@@ -3,86 +3,54 @@
 
 #include <Arduino.h>
 
+#include <gos/atl/statistics.h>
 #include <gos/atl/sort.h>
-
-// should at least be 5 to be practical
-// odd size results in a 'real' middle element.
-// even size takes the lower of the two middle elements
-#ifndef MEDIAN_DEFAULT_COUNT
-#define MEDIAN_DEFAULT_COUNT 8
-#endif
 
 namespace gos {
 namespace atl {
+namespace statistics {
 
-template<
-  typename T,
-  typename R = uint8_t,
-  typename C = uint8_t,
-  typename I = uint8_t >
+template<typename T, typename I = uint8_t >
 class Median {
 public:
-  Median(const T& undefined, const C& size = MEDIAN_DEFAULT_COUNT) :
-    size_(size),
-    count_(),
-    index_(size),
-    values_(nullptr),
-    reference_(nullptr),
-    undefined_(undefined),
-    median_(),
-    cached_(nullptr)
-  {
-    values_ = static_cast<T*>(malloc(count_ * sizeof(T)));
-    reference_ = static_cast<R*>(malloc(count_ * sizeof(R)));
+  Median(::gos::atl::statistics::Set<T, I>& set) :
+    set_(set),
+    reference_(nullptr) {
+    reference_ = static_cast<I*>(malloc(set_.Size * sizeof(I)));
     resetref();
   }
 
   void clear() {
-    count_ = 0;
-    cached_ = nullptr;
+    set_.clear();
     resetref();
   }
 
-  bool add(const T& value) {
-    cached_ = nullptr;
-    index_ = index_ < size_ - 1 ? index_ + 1 : 0;
-    values_[index_] = value;
-    if (count_ < size_) {
-      count_++;
-      return false;
-    } else {
-      return true;
-    }
-  }
-
   T get() {
-    if (cached_) {
-      return *cached_;
-    } else {
-      cached_ = &median_;
-      switch (count_) {
-      case 0:
-        return median_ = undefined_;
-      case 1:
-        return median_ = values_[0];
-      case 2:
-        return median_ = (values_[0] + values_[1]) / static_cast<T>(2);
-      default:
-        ::gos::atl::sort::insertion<T, R>(values_, reference_, count_);
-        if (count_ & 1)
-          return median_ = values_[reference_[count_ / 2]];
-        else
-          return median_ =
-          (values_[reference_[count_ / 2]] + values_[reference_[count_ / 2 - 1]]) / 2.0F;
+    if (set_.IsCached) {
+      return set_.Statistics;
+    }
+    else {
+      set_.IsCached = true;
+      if (set_.Count > 2) {
+        ::gos::atl::sort::insertion<T, I>(set_.Values, reference_, set_.Count);
+        if (set_.Count & 1) {
+          return set_.Statistics = set_.Values[reference_[set_.Count / 2]];
+        }
+        else {
+          return set_.Statistics = (
+            set_.Values[reference_[set_.Count / 2]] +
+            set_.Values[reference_[set_.Count / 2 - 1]])
+            / static_cast<T>(2);
+        }
+      }
+      else {
+        return set_.Statistics = set_.get();
       }
     }
   }
 
   void cleanup() {
-    if (values_) {
-      free(values_);
-      values_ = nullptr;
-    }
+    set_.cleanup();
     if (reference_) {
       free(reference_);
       reference_ = nullptr;
@@ -91,20 +59,15 @@ public:
 
 private:
   void resetref() {
-    for (index_ = 0; index_ < size_; index_++) {
-      reference_[index_] = static_cast<R>(index_);
+    for (set_.Index = 0; set_.Index < set_.Size; set_.Index++) {
+      reference_[set_.Index] = static_cast<I>(set_.Index);
     }
   }
-  C size_;
-  C count_;
-  I index_;
-  T* values_;
-  R* reference_;
-  T undefined_;
-  T median_;
-  T* cached_;
+  ::gos::atl::statistics::Set<T, I>& set_;
+  I* reference_;
 };
 
 }
 }
-#endif /* _GOS_ARDUINO_TEMPLATE_LIBRARY_SORT_H_ */
+}
+#endif /* _GOS_ARDUINO_TEMPLATE_LIBRARY_MEDIAN_H_ */
