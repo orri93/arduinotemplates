@@ -49,6 +49,7 @@ public:
     }
   }
 
+#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_CLEANUP
   void cleanup() {
     set_.cleanup();
     if (reference_) {
@@ -56,6 +57,7 @@ public:
       reference_ = nullptr;
     }
   }
+#endif
 
 private:
   void resetref() {

@@ -53,12 +53,14 @@ public:
     }
   }
 
+#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_CLEANUP
   void cleanup() {
     if (Values) {
       free(Values);
       Values = nullptr;
     }
   }
+#endif
 
   I Size;
   I Count;
