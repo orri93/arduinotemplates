@@ -1,0 +1,24 @@
+{
+  "name": "GosArduinoTemplateLibrary",
+  "keywords": "Template,Gos,display,oled,statistics,median,avrage,sort,format",
+  "description": "Arduino Template Library.",
+  "authors":
+  [
+    {
+      "name": "Geirmundur Orri Sigurdssson",
+      "email": "rusl@icesoft.is",
+      "maintainer": true
+    }
+  ],
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com:orri93/arduinotemplate.git"
+  },
+  "version":"0.0.1",
+  "frameworks": "arduino",
+  "platforms": "*",
+  "export": {
+    "include": "libraries/GosTemplates/src"
+  }
+}
