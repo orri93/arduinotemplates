@@ -8,28 +8,46 @@
 
 #include <gatlbuffer.h>
 
+#define GOS_FONT_COD_8F                     u8g2_font_pressstart2p_8f
+#define GOS_FONT_COD_8R                     u8g2_font_pressstart2p_8r
+#define GOS_FONT_COD_8U                     u8g2_font_pressstart2p_8u
+
+#define GOS_FONT_PRO_MF_8                      u8g2_font_profont12_mf
+#define GOS_FONT_PRO_MR_8                      u8g2_font_profont12_mr
+
+#define GOS_FONT_PRO_MF_14                     u8g2_font_profont22_mf
+#define GOS_FONT_PRO_MR_14                     u8g2_font_profont22_mr
+
+#define GOS_FONT_INC_MF_30                         u8g2_font_inb30_mf
+#define GOS_FONT_INC_MR_30                         u8g2_font_inb30_mr
+
+
 #ifndef DISPLAY_DEFAULT
-#define DISPLAY_DEFAULT U8G2_SSD1306_128X32_UNIVISION_1_HW_I2C
+#define DISPLAY_DEFAULT        U8G2_SSD1306_128X32_UNIVISION_1_HW_I2C
+#endif
+
+#ifndef DISPLAY_DEFAULT_FONT
+#define DISPLAY_DEFAULT_FONT                          GOS_FONT_COD_8U
 #endif
 
 #ifndef DISPLAY_FONT_ONE_LINE
-#define DISPLAY_FONT_ONE_LINE u8g2_font_cardimon_pixel_tf
+#define DISPLAY_FONT_ONE_LINE                      GOS_FONT_INC_MR_30
 #endif
 #ifndef DISPLAY_ONE_LINE_Y
-#define DISPLAY_ONE_LINE_Y     31
+#define DISPLAY_ONE_LINE_Y                                         31
 #endif
 #ifndef DISPLAY_ONE_LINE_X
-#define DISPLAY_ONE_LINE_X      0
+#define DISPLAY_ONE_LINE_X                                          0
 #endif
 
 #ifndef DISPLAY_FONT_TWO_LINES
-#define DISPLAY_FONT_TWO_LINES u8g2_font_profont22_mf
+#define DISPLAY_FONT_TWO_LINES                     GOS_FONT_PRO_MR_14
 #endif
 #ifndef DISPLAY_TWO_LINES_Y1
-#define DISPLAY_TWO_LINES_Y1   14
+#define DISPLAY_TWO_LINES_Y1                                       14
 #endif
 #ifndef DISPLAY_TWO_LINES_Y2
-#define DISPLAY_TWO_LINES_Y2   32
+#define DISPLAY_TWO_LINES_Y2                                       32
 #endif
 
 
@@ -59,7 +77,11 @@ public:
 
 template<typename D = DISPLAY_DEFAULT> class Render {
 public:
-  Render(Oled<D>& oled) : oled_(oled), request_(false), starting_(false) {
+  Render(Oled<D>& oled, const uint8_t *font = DISPLAY_DEFAULT_FONT) :
+    oled_(oled),
+    font_(font),
+    request_(false),
+    starting_(false) {
   }
   virtual void render(D* d) = 0;
   void loop() {
@@ -78,6 +100,7 @@ protected:
   void request() {
     starting_ = request_ = true;
   }
+  uint8_t *font_;
 private:
   bool request_;
   bool starting_;
@@ -89,14 +112,14 @@ namespace line {
 template<typename D = DISPLAY_DEFAULT, typename S = uint8_t>
 class One : public Render<D> {
 public:
-  One(Oled<D>& oled) : Render<D>(oled) {
+  One(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_ONE_LINE) : Render<D>(oled, font) {
   }
   void display(::gos::atl::buffer::Holder<S>& holder) {
     holder_ = &holder;
     request();
   }
   void render(D* d) {
-    d->setFont(DISPLAY_FONT_ONE_LINE);
+    d->setFont(font_);
     d->drawStr(DISPLAY_ONE_LINE_X, DISPLAY_ONE_LINE_Y, holder_->Buffer);
   }
 private:
@@ -107,7 +130,7 @@ private:
 template<typename D = DISPLAY_DEFAULT, typename S = uint8_t>
 class Two : public Render<D> {
 public:
-  Two(Oled<D>& oled) : Render<D>(oled) {
+  Two(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_TWO_LINE) : Render<D>(oled, font) {
   }
   void display(
     ::gos::atl::buffer::Holder<S>& one,
@@ -117,9 +140,9 @@ public:
     request();
   }
   void render(D* d) {
-    d->setFont(DISPLAY_FONT_TWO_LINES);
+    d->setFont(font_);
     d->drawStr(0, DISPLAY_TWO_LINES_Y1, one_->Buffer);
-    d->setFont(DISPLAY_FONT_TWO_LINES);
+    d->setFont(font_);
     d->drawStr(0, DISPLAY_TWO_LINES_Y2, two_->Buffer);
   }
 private:
