@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#include <gos/atl/buffer.h>
+#include <gatlbuffer.h>
 
 #define GOS_ARDUINO_TEMPLATE_LIBRARY_WIDTH_FILL           127
 #define GOS_ARDUINO_TEMPLATE_LIBRARY_WIDTH_FILL_NEGATIVE -127
@@ -159,7 +159,7 @@ template<typename T, typename S = uint8_t> void integer(
 #ifdef GOS_ARDUINO_UNIT_TESTING
   S length = snprintf(pointer, size, "%d", value);
 #else
-  S length sprintf(pointer, "%d", value);
+  S length = sprintf(pointer, "%d", value);
 #endif
   switch (width)
   {

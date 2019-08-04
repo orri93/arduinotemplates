@@ -6,7 +6,7 @@
 #include <Wire.h>
 #include <U8g2lib.h>
 
-#include <gos/atl/buffer.h>
+#include <gatlbuffer.h>
 
 #ifndef DISPLAY_DEFAULT
 #define DISPLAY_DEFAULT U8G2_SSD1306_128X32_UNIVISION_1_HW_I2C
@@ -65,59 +65,66 @@ public:
   void loop() {
     if (request_) {
       if (starting_) {
-        oled.U8g2->firstPage();
+        oled_.U8g2->firstPage();
         starting_ = false;
       }
       render(oled_.U8g2);
-      if(!oled.U8g2->nextPage()) {
+      if(!oled_.U8g2->nextPage()) {
         request_ = false;
       }
     }
   }
+protected:
+  void request() {
+    starting_ = request_ = true;
+  }
 private:
-  Oled<D>& oled_;
   bool request_;
   bool starting_;
+  Oled<D>& oled_;
 };
 
 namespace line {
 
-template<typename D = DISPLAY_DEFAULT> class One : public Render<D> {
+template<typename D = DISPLAY_DEFAULT, typename S = uint8_t>
+class One : public Render<D> {
 public:
-  One(
-    Oled<D>& oled,
-    ::gos::atl::buffer::Holder& holder) :
-    Render<D>(oled),
-    holder_(holder) {
+  One(Oled<D>& oled) : Render<D>(oled) {
+  }
+  void display(::gos::atl::buffer::Holder<S>& holder) {
+    holder_ = &holder;
+    request();
   }
   void render(D* d) {
     d->setFont(DISPLAY_FONT_ONE_LINE);
-    d->drawStr(DISPLAY_ONE_LINE_X, DISPLAY_ONE_LINE_Y, holder_.Buffer);
+    d->drawStr(DISPLAY_ONE_LINE_X, DISPLAY_ONE_LINE_Y, holder_->Buffer);
   }
 private:
   Oled<D>& oled_;
-  ::gos::atl::buffer::Holder& holder_;
+  ::gos::atl::buffer::Holder<S>* holder_;
 };
 
-template<typename D = DISPLAY_DEFAULT> class Two : public Render<D> {
+template<typename D = DISPLAY_DEFAULT, typename S = uint8_t>
+class Two : public Render<D> {
 public:
-  Two(
-    Oled<D>& oled,
-    ::gos::atl::buffer::Holder& one,
-    ::gos::atl::buffer::Holder& two) :
-    Render<D>(oled),
-    one_(one),
-    two_(two) {
+  Two(Oled<D>& oled) : Render<D>(oled) {
+  }
+  void display(
+    ::gos::atl::buffer::Holder<S>& one,
+    ::gos::atl::buffer::Holder<S>& two) {
+    one_ = &one;
+    two_ = &two;
+    request();
   }
   void render(D* d) {
     d->setFont(DISPLAY_FONT_TWO_LINES);
-    d->drawStr(0, DISPLAY_TWO_LINES_Y1, one_.Buffer);
+    d->drawStr(0, DISPLAY_TWO_LINES_Y1, one_->Buffer);
     d->setFont(DISPLAY_FONT_TWO_LINES);
-    d->drawStr(0, DISPLAY_TWO_LINES_Y2, two_.Buffer);
+    d->drawStr(0, DISPLAY_TWO_LINES_Y2, two_->Buffer);
   }
 private:
-  ::gos::atl::buffer::Holder& one_;
-  ::gos::atl::buffer::Holder& two_;
+  ::gos::atl::buffer::Holder<S>* one_;
+  ::gos::atl::buffer::Holder<S>* two_;
 };
 
 }

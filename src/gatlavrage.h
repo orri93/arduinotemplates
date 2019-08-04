@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#include <gos/atl/statistics.h>
+#include <gatlstatistics.h>
 
 namespace gos {
 namespace atl {

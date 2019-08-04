@@ -3,8 +3,8 @@
 
 #include <Arduino.h>
 
-#include <gos/atl/statistics.h>
-#include <gos/atl/sort.h>
+#include <gatlstatistics.h>
+#include <gatlsort.h>
 
 namespace gos {
 namespace atl {
