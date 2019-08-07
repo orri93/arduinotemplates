@@ -3,116 +3,77 @@
 
 #include <Arduino.h>
 
-#ifdef GATL_PID_DEBUG
-extern bool gatl_pid_debug;
-#endif
+#include <gatltype.h>
+#include <gatlutility.h>
 
 namespace gos {
 namespace atl {
 namespace pid {
 
+/* For reverse flip the signs for Kp, Ki, Kd */
 template<typename I, typename O = I, typename P = I>
 struct Parameter {
+  ::gos::atl::type::range<O> Range;
   I Setpoint;
-  O Minimum;
-  O Maximum;
-  /* For reverse flip the signs for Kp, Ki, Kd */
+  P TimeMs;
   P Kp;
-  P KiTimesTime;      /* Ki * sample time in ms - for Ki use KiT / 1000 */
-  P KdDividedByTime;  /* Kd / sample time in ms - for Kd use 1000 * KdT */
+  P Ki;
+  P Kd;
   bool PonE;
 };
 
-template<typename I, typename O = I, typename P = I>
-void initialize(
-  Parameter<I, O, P>& parameter,
-  const O& minimum,
-  const O& maximum,
-  const P& timems,
-  const P& kp,
-  const P& ki,
-  const P& kd,
-  const bool& pone = false) {
-  parameter.Setpoint = I();
-  parameter.Minimum = minimum;
-  parameter.Maximum = maximum;
-  parameter.Kp = kp;
-  parameter.KiTimesTime = ki * timems;
-  parameter.KdDividedByTime = kd / timems;
-  parameter.PonE = pone;
-}
-
-
-template<typename I, typename O = I>
+template<typename V>
 struct Variable {
-  I LastInput;
-  O OutputSum;
+  V LastInput;
+  V KiTimesTime;      /* Ki * sample time */
+  V KdDividedByTime;  /* Kd / sample time */
+  V OutputSum;
 };
 
-template<typename I, typename O = I, typename P = I>
-void initialize(
-  Variable<I, O>& variables,
-  const Parameter<I, O, P>& parameter,
+template<typename V, typename I = V, typename O = V, typename P = V>
+void tunings(Variable<V>& variable, const Parameter<I, O, P>& parameter) {
+#ifdef GATL_PID_TUNING_IN_MS
+  variable.KiTimesTime = static_cast<V>(parameter.Ki * parameter.TimeMs);
+  variable.KdDividedByTime = static_cast<V>(parameter.Kd / parameter.TimeMs);
+#else
+  variable.KiTimesTime = static_cast<V>(parameter.Ki * (parameter.TimeMs / P(1000)));
+  variable.KdDividedByTime = static_cast<V>(parameter.Kd / (parameter.TimeMs / P(1000)));
+#endif
+}
+
+template<typename V, typename I = V, typename O = V> void initialize(
+  Variable<V>& variable,
+  const ::gos::atl::type::range<O>& range,
   const I& input = I(),
   const O& output = O()) {
-  variables.LastInput = input;
-  if (output >= parameter.Minimum && output <= parameter.Maximum) {
-    variables.OutputSum = output;
-  } else if (output > parameter.Maximum) {
-    variables.OutputSum = parameter.Maximum;
-  } else {
-    variables.OutputSum = parameter.Minimum;
-  }
+  variable.LastInput = static_cast<V>(input);
+  variable.OutputSum = static_cast<V>(::gos::atl::utility::restrict(output, range));
 }
 
-#ifdef GATL_PID_DEBUG
-template<typename Q> void show(const char* text, const Q& q) {
-  if (gatl_pid_debug) {
-    std::cout << text << static_cast<float>(q) << std::endl;
-  }
-}
-#define GATL_PID_DEBUG_SHOW(n,x) show(n,x)
+template<typename I, typename O = I, typename P = I, typename V = I>
+O compute(const I& input, Variable<V>& variable, const Parameter<I, O, P>& parameter) {
+  /* Calculate error and delta input */
+  V error = static_cast<V>(parameter.Setpoint - input);
+  V i = static_cast<V>(input);
+  V di = i - variable.LastInput;
+  variable.LastInput = i;
+#ifdef GATL_PID_TUNING_IN_MS
+  variable.OutputSum += error * parameter.KiTimesTime / V(1000);
 #else
-#define GATL_PID_DEBUG_SHOW(n,x)
+  variable.OutputSum += error * variable.KiTimesTime;
 #endif
-
-template<typename I, typename O = I, typename P = I>
-O compute(const I& input, Variable<I, O>& variable, const Parameter<I, O, P>& parameter) {
-  GATL_PID_DEBUG_SHOW("Input: ", input);
-  I error = parameter.Setpoint - input;
-  GATL_PID_DEBUG_SHOW("Error: ", error);
-  I di = input - variable.LastInput;
-  GATL_PID_DEBUG_SHOW("Delta input: ", di);
-  variable.LastInput = input;
-  I kits = static_cast<I>(parameter.KiTimesTime) / I(1000);
-  GATL_PID_DEBUG_SHOW("Ki * time(s): ", kits);
-  GATL_PID_DEBUG_SHOW("Output sum: ", variable.OutputSum);
-  variable.OutputSum += static_cast<O>(error * (static_cast<I>(parameter.KiTimesTime) / I(1000)));
-  GATL_PID_DEBUG_SHOW("Output sum: ", variable.OutputSum);
-  I kddts = I(1000) * static_cast<I>(parameter.KdDividedByTime);
-  GATL_PID_DEBUG_SHOW("Kd / time(s): ", kddts);
   if (!parameter.PonE) {
-    variable.OutputSum -= static_cast<O>(static_cast<I>(parameter.Kp) * di);
+    variable.OutputSum -= di * static_cast<V>(parameter.Kp);
   }
-  GATL_PID_DEBUG_SHOW("Output sum: ", variable.OutputSum);
-  if (variable.OutputSum > parameter.Maximum) {
-    variable.OutputSum = parameter.Maximum;
-  }
-  else if (variable.OutputSum < parameter.Minimum) {
-    variable.OutputSum = parameter.Minimum;
-  }
-  GATL_PID_DEBUG_SHOW("Output sum: ", variable.OutputSum);
-  O output = parameter.PonE ? static_cast<O>(static_cast<I>(parameter.Kp) * error) : O();
-  GATL_PID_DEBUG_SHOW("Output: ", output);
-  output += variable.OutputSum - static_cast<O>(I(1000) * static_cast<I>(parameter.KdDividedByTime) * di);
-  GATL_PID_DEBUG_SHOW("Output: ", output);
-  if (output >= parameter.Minimum && output <= parameter.Maximum) {
-    return output;
-  } else if (output > parameter.Maximum) {
-    return parameter.Maximum;
-  } else {
-    return parameter.Minimum;
-  }
+  variable.OutputSum = ::gos::atl::utility::restrict(
+    variable.OutputSum, parameter.Range);
+  V output = parameter.PonE ? static_cast<V>(parameter.Kp) * error : V();
+#ifdef GATL_PID_TUNING_IN_MS
+  output += variable.OutputSum - V(1000) * parameter.KdDividedByTime * di;
+#else
+  output += variable.OutputSum - variable.KdDividedByTime * di;
+#endif
+  return ::gos::atl::utility::restrict(static_cast<O>(output), parameter.Range);
 }
 
 }
