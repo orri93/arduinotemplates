@@ -130,7 +130,7 @@ private:
 template<typename D = DISPLAY_DEFAULT, typename S = uint8_t>
 class Two : public Render<D> {
 public:
-  Two(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_TWO_LINE) : Render<D>(oled, font) {
+  Two(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_TWO_LINES) : Render<D>(oled, font) {
   }
   void display(
     ::gos::atl::buffer::Holder<S>& one,
