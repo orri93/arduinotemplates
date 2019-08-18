@@ -21,7 +21,6 @@
 #define GOS_FONT_INC_MF_30                         u8g2_font_inb30_mf
 #define GOS_FONT_INC_MR_30                         u8g2_font_inb30_mr
 
-
 #ifndef DISPLAY_DEFAULT
 #define DISPLAY_DEFAULT        U8G2_SSD1306_128X32_UNIVISION_1_HW_I2C
 #endif
@@ -55,7 +54,7 @@ namespace gos {
 namespace atl {
 namespace display {
 
-template<typename D = DISPLAY_DEFAULT> class Oled {
+template<class D = DISPLAY_DEFAULT> class Oled {
 public:
   Oled() {
     U8g2 = new D(U8G2_R0);
@@ -75,7 +74,7 @@ public:
   D* U8g2;
 };
 
-template<typename D = DISPLAY_DEFAULT> class Render {
+template<class D = DISPLAY_DEFAULT> class Render {
 public:
   Render(Oled<D>& oled, const uint8_t *font = DISPLAY_DEFAULT_FONT) :
     oled_(oled),
@@ -100,7 +99,7 @@ protected:
   void request() {
     starting_ = request_ = true;
   }
-  uint8_t *font_;
+  const uint8_t *font_;
 private:
   bool request_;
   bool starting_;
@@ -109,7 +108,7 @@ private:
 
 namespace line {
 
-template<typename D = DISPLAY_DEFAULT, typename S = uint8_t>
+template<class D = DISPLAY_DEFAULT, typename S = uint8_t>
 class One : public Render<D> {
 public:
   One(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_ONE_LINE) : Render<D>(oled, font) {
@@ -123,11 +122,10 @@ public:
     d->drawStr(DISPLAY_ONE_LINE_X, DISPLAY_ONE_LINE_Y, holder_->Buffer);
   }
 private:
-  Oled<D>& oled_;
   ::gos::atl::buffer::Holder<S>* holder_;
 };
 
-template<typename D = DISPLAY_DEFAULT, typename S = uint8_t>
+template<class D = DISPLAY_DEFAULT, typename S = uint8_t>
 class Two : public Render<D> {
 public:
   Two(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_TWO_LINES) : Render<D>(oled, font) {
