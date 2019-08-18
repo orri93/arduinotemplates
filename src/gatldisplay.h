@@ -118,7 +118,7 @@ public:
     request();
   }
   void render(D* d) {
-    d->setFont(font_);
+    d->setFont(Render<D>::font_);
     d->drawStr(DISPLAY_ONE_LINE_X, DISPLAY_ONE_LINE_Y, holder_->Buffer);
   }
 private:
@@ -138,9 +138,9 @@ public:
     request();
   }
   void render(D* d) {
-    d->setFont(font_);
+    d->setFont(Render<D>::font_);
     d->drawStr(0, DISPLAY_TWO_LINES_Y1, one_->Buffer);
-    d->setFont(font_);
+    d->setFont(Render<D>::font_);
     d->drawStr(0, DISPLAY_TWO_LINES_Y2, two_->Buffer);
   }
 private:
