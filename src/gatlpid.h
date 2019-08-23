@@ -17,9 +17,19 @@ struct Parameter {
   I Setpoint;
   P TimeMs;
   P Kp;
-  P Ki;
-  P Kd;
   bool PonE;
+};
+
+template<typename T>
+struct Tune {
+  T Ki;
+  T Kd;
+};
+
+template<typename T>
+struct TimeTune {
+  T Ti;
+  T Td;
 };
 
 template<typename V>
@@ -30,15 +40,77 @@ struct Variable {
   V OutputSum;
 };
 
-template<typename V, typename I = V, typename O = V, typename P = V>
-void tunings(Variable<V>& variable, const Parameter<I, O, P>& parameter) {
-#ifdef GATL_PID_TUNING_IN_MS
-  variable.KiTimesTime = static_cast<V>(parameter.Ki * parameter.TimeMs);
-  variable.KdDividedByTime = static_cast<V>(parameter.Kd / parameter.TimeMs);
+template<typename V>
+struct Values {
+  bool Mode;
+  V Manual;
+};
+
+template<typename T> T Ki(const T& gain, const T& ti) {
+#ifndef GATL_PID_TUNING_TIME_IN_MIN
+  return gain / ti;
 #else
-  variable.KiTimesTime = static_cast<V>(parameter.Ki * (parameter.TimeMs / P(1000)));
-  variable.KdDividedByTime = static_cast<V>(parameter.Kd / (parameter.TimeMs / P(1000)));
+  return gain / (T(60) * ti);
 #endif
+}
+
+template<typename T> T Kd(const T& gain, const T& td) {
+#ifndef GATL_PID_TUNING_TIME_IN_MIN
+  return gain * td;
+#else
+  return gain * (T(60) * td);
+#endif
+}
+
+template<typename T> T Ti(const T& kp, const T& ki) {
+#ifndef GATL_PID_TUNING_TIME_IN_MIN
+  return kp / ki;
+#else
+  return (kp / ki) / T(60);
+#endif
+}
+
+template<typename T> T Td(const T& kp, const T& kd) {
+#ifndef GATL_PID_TUNING_TIME_IN_MIN
+  return kd / kp;
+#else
+  return (kd / kp) / T(60);
+#endif
+}
+
+template<typename V, typename I = V, typename O = V, typename P = V>
+void tunings(
+  Variable<V>& variable,
+  const Parameter<I, O, P>& parameter,
+  const P& ki,
+  const P& kd) {
+#ifndef GATL_PID_TUNING_IN_MS
+  variable.KiTimesTime = static_cast<V>(ki * (parameter.TimeMs / P(1000)));
+  variable.KdDividedByTime = static_cast<V>(kd / (parameter.TimeMs / P(1000)));
+#else
+  variable.KiTimesTime = static_cast<V>(ki * parameter.TimeMs);
+  variable.KdDividedByTime = static_cast<V>(kd / parameter.TimeMs);
+#endif
+}
+
+template<typename V, typename I = V, typename O = V, typename P = V>
+void tunings(
+  Variable<V>& variable,
+  const Parameter<I, O, P>& parameter,
+  const Tune<P>& tune) {
+  tunings(variable, parameter, tune.Ki, tune.Kd);
+}
+
+template<typename V, typename I = V, typename O = V, typename P = V>
+void tunings(
+  Variable<V>& variable,
+  const Parameter<I, O, P>& parameter,
+  const TimeTune<P>& tune) {
+  tunings(
+    variable,
+    parameter,
+    Ki(parameter.Kp, tune.Ti),
+    Kd(parameter.Kp, tune.Td));
 }
 
 template<typename V, typename I = V, typename O = V> void initialize(
@@ -47,20 +119,24 @@ template<typename V, typename I = V, typename O = V> void initialize(
   const I& input = I(),
   const O& output = O()) {
   variable.LastInput = static_cast<V>(input);
-  variable.OutputSum = static_cast<V>(::gos::atl::utility::restrict(output, range));
+  variable.OutputSum =
+    static_cast<V>(::gos::atl::utility::restrict(output, range));
 }
 
 template<typename I, typename O = I, typename P = I, typename V = I>
-O compute(const I& input, Variable<V>& variable, const Parameter<I, O, P>& parameter) {
+O compute(
+  const I& input,
+  Variable<V>& variable,
+  const Parameter<I, O, P>& parameter) {
   /* Calculate error and delta input */
   V error = static_cast<V>(parameter.Setpoint - input);
   V i = static_cast<V>(input);
   V di = i - variable.LastInput;
   variable.LastInput = i;
-#ifdef GATL_PID_TUNING_IN_MS
-  variable.OutputSum += error * parameter.KiTimesTime / V(1000);
-#else
+#ifndef GATL_PID_TUNING_IN_MS
   variable.OutputSum += error * variable.KiTimesTime;
+#else
+  variable.OutputSum += error * parameter.KiTimesTime / V(1000);
 #endif
   if (!parameter.PonE) {
     variable.OutputSum -= di * static_cast<V>(parameter.Kp);
@@ -68,12 +144,14 @@ O compute(const I& input, Variable<V>& variable, const Parameter<I, O, P>& param
   variable.OutputSum = ::gos::atl::utility::restrict(
     variable.OutputSum, parameter.Range);
   V output = parameter.PonE ? static_cast<V>(parameter.Kp) * error : V();
-#ifdef GATL_PID_TUNING_IN_MS
-  output += variable.OutputSum - V(1000) * parameter.KdDividedByTime * di;
-#else
+#ifndef GATL_PID_TUNING_IN_MS
   output += variable.OutputSum - variable.KdDividedByTime * di;
+#else
+  output += variable.OutputSum - V(1000) * parameter.KdDividedByTime * di;
 #endif
-  return ::gos::atl::utility::restrict(static_cast<O>(output), parameter.Range);
+  return ::gos::atl::utility::restrict(
+    static_cast<O>(output),
+    parameter.Range);
 }
 
 }
