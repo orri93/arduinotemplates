@@ -7,6 +7,7 @@
 #include <U8g2lib.h>
 
 #include <gatlbuffer.h>
+#include <gatlstatistics.h>
 
 #define GOS_FONT_COD_8F                     u8g2_font_pressstart2p_8f
 #define GOS_FONT_COD_8R                     u8g2_font_pressstart2p_8r
@@ -49,10 +50,11 @@
 #define DISPLAY_TWO_LINES_Y2                                       32
 #endif
 
-
 namespace gos {
 namespace atl {
 namespace display {
+
+typedef u8g2_uint_t u8g2_point_t;
 
 template<class D = DISPLAY_DEFAULT> class Oled {
 public:
@@ -76,9 +78,8 @@ public:
 
 template<class D = DISPLAY_DEFAULT> class Render {
 public:
-  Render(Oled<D>& oled, const uint8_t *font = DISPLAY_DEFAULT_FONT) :
+  Render(Oled<D>& oled) :
     oled_(oled),
-    font_(font),
     request_(false),
     starting_(false) {
   }
@@ -99,26 +100,69 @@ protected:
   void request() {
     starting_ = request_ = true;
   }
-  const uint8_t *font_;
 private:
   bool request_;
   bool starting_;
   Oled<D>& oled_;
 };
 
+template<
+  class D = DISPLAY_DEFAULT,
+  typename I = uint8_t,
+  typename P = u8g2_point_t>
+class Graph : public Render<D> {
+public:
+  Graph(Oled<D>& oled, const P& dx = 2) :
+    Render<D>(oled),
+    points_(nullptr),
+    Dx(dx) {
+  }
+  void display(::gos::atl::statistics::Set<P>& points) {
+    points_ = &points;
+    request();
+  }
+  void render(D* d) {
+    if (points_->Count > 1) {
+      P x = P(0);
+      for (I i = I(1); i < points_->Count; i++) {
+        d->drawLine(
+          x,
+          points_->Values[i - 1],
+          x + Dx,
+          points_->Values[i]);
+        x += Dx;
+      }
+    }
+  }
+  P Dx;
+private:
+  ::gos::atl::statistics::Set<P>* points_;
+};
+
+template<class D = DISPLAY_DEFAULT>
+class String : public Render<D> {
+public:
+  String(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_ONE_LINE) :
+    Render<D>(oled),
+    font_(font) {
+  }
+protected:
+  const uint8_t *font_;
+};
+
 namespace line {
 
 template<class D = DISPLAY_DEFAULT, typename S = uint8_t>
-class One : public Render<D> {
+class One : public String<D> {
 public:
-  One(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_ONE_LINE) : Render<D>(oled, font) {
+  One(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_ONE_LINE) : String<D>(oled, font) {
   }
   void display(::gos::atl::buffer::Holder<S>& holder) {
     holder_ = &holder;
     request();
   }
   void render(D* d) {
-    d->setFont(Render<D>::font_);
+    d->setFont(String<D>::font_);
     d->drawStr(DISPLAY_ONE_LINE_X, DISPLAY_ONE_LINE_Y, holder_->Buffer);
   }
 private:
@@ -126,9 +170,9 @@ private:
 };
 
 template<class D = DISPLAY_DEFAULT, typename S = uint8_t>
-class Two : public Render<D> {
+class Two : public String<D> {
 public:
-  Two(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_TWO_LINES) : Render<D>(oled, font) {
+  Two(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_TWO_LINES) : String<D>(oled, font) {
   }
   void display(
     ::gos::atl::buffer::Holder<S>& one,
@@ -138,9 +182,9 @@ public:
     request();
   }
   void render(D* d) {
-    d->setFont(Render<D>::font_);
+    d->setFont(String<D>::font_);
     d->drawStr(0, DISPLAY_TWO_LINES_Y1, one_->Buffer);
-    d->setFont(Render<D>::font_);
+    d->setFont(String<D>::font_);
     d->drawStr(0, DISPLAY_TWO_LINES_Y2, two_->Buffer);
   }
 private:

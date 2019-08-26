@@ -14,6 +14,8 @@ namespace gos {
 namespace atl {
 namespace statistics {
 
+typedef uint8_t DefaultIndex;
+
 template<typename T, typename I = uint8_t>
 class Set {
 public:
@@ -51,6 +53,10 @@ public:
     default:
       return undefined_;
     }
+  }
+
+  bool issaturated() {
+    return Count == SIze;
   }
 
 #ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_CLEANUP
