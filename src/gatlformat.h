@@ -184,7 +184,7 @@ template<typename T, typename S = uint8_t> void integer(
   *pointer = '\0';
 }
 
-template<typename S = uint8_t> void error(
+template<typename S = uint8_t> void message(
   buffer::Holder<S>& holder,
   const char* message,
   const uint8_t& length,

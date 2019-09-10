@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 #ifndef GOS_ARDUINO_TEMPLATE_LIBRARY_BUFFER_SIZE
-#define GOS_ARDUINO_TEMPLATE_LIBRARY_BUFFER_SIZE           12
+#define GOS_ARDUINO_TEMPLATE_LIBRARY_BUFFER_SIZE           11
 #endif
 
 namespace gos {

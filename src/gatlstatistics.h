@@ -56,7 +56,7 @@ public:
   }
 
   bool issaturated() {
-    return Count == SIze;
+    return Count == Size;
   }
 
 #ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_CLEANUP
