@@ -20,10 +20,25 @@ public:
   virtual ~Sensor() {}
   virtual void begin() {}
   virtual Status measure() = 0;
-  virtual T value() = 0;
-  virtual C code() = 0;
+  virtual const char* error(uint8_t& length) = 0;
+  C Code;
+  T Value;
+  ::gos::atl::type::range<T> Range;
+  Status Last;
 protected:
-  ::gos::atl::type::range range_;
+  virtual Status check(const bool& restrictvalue = true) {
+    if (Value >= Range.lowest && Value <= Range.highest) {
+      return Last = Status::Operational;
+    } else if (Value < Range.lowest) {
+      if (restrictvalue)
+        Value = Range.lowest;
+      return Last = Status::BelowRange;
+    } else {
+      if (restrictvalue)
+        Value = Range.highest;
+      return Last = Status::AboveRange;
+    }
+  }
 };
 
 }
