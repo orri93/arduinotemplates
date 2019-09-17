@@ -85,10 +85,10 @@ template<class D = DISPLAY_DEFAULT> void two(
   const char* messageone,
   const char* messagetwo,
   const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
-  d->setFont(font);
-  d->drawStr(0, DISPLAY_TWO_LINES_Y1, messageone);
-  d->setFont(font);
-  d->drawStr(0, DISPLAY_TWO_LINES_Y2, messagetwo);
+  d.setFont(font);
+  d.drawStr(0, DISPLAY_TWO_LINES_Y1, messageone);
+  d.setFont(font);
+  d.drawStr(0, DISPLAY_TWO_LINES_Y2, messagetwo);
 }
 template<class D = DISPLAY_DEFAULT, typename S = uint8_t> void two(
   D& d,
@@ -114,7 +114,7 @@ void logo(Oled<D>& oled, u8g2_uint_t w, u8g2_uint_t h, const uint8_t *bitmap) {
   // picture loop
   oled.U8g2->firstPage();
   do {
-    details::logo<D>(oled.U8g2, w, h, bitmap);
+    details::logo<D>(*(oled.U8g2), w, h, bitmap);
   } while (oled.U8g2->nextPage());
 }
 namespace line {
@@ -125,7 +125,7 @@ void one(
   const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
   oled.U8g2->firstPage();
   do {
-    details::line::one<D>(oled.U8g2, message, font);
+    details::line::one<D>(*(oled.U8g2), message, font);
   } while (oled.U8g2->nextPage());
 }
 template<class D = DISPLAY_DEFAULT, typename S = uint8_t>
@@ -133,7 +133,7 @@ void one(
   Oled<D>& oled,
   ::gos::atl::buffer::Holder<S>& holder,
   const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
-  one<D>(oled, holder, font);
+  one<D>(oled, holder.Buffer, font);
 }
 template<class D = DISPLAY_DEFAULT>
 void two(
@@ -143,7 +143,7 @@ void two(
   const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
   oled.U8g2->firstPage();
   do {
-    details::line::two<D>(oled.U8g2, one, two, font);
+    details::line::two<D>(*(oled.U8g2), one, two, font);
   } while (oled.U8g2->nextPage());
 }
 template<class D = DISPLAY_DEFAULT, typename S = uint8_t>
@@ -154,7 +154,7 @@ void two(
   const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
   oled.U8g2->firstPage();
   do {
-    details::line::two<D>(oled.U8g2, one, two, font);
+    details::line::two<D>(*(oled.U8g2), one.Buffer, two.Buffer, font);
   } while (oled.U8g2->nextPage());
 }
 }
@@ -267,7 +267,7 @@ public:
     request();
   }
   void render(D* d) {
-    details::line::one<D,S>(*d, holder_, String<D>::font_);
+    details::line::one<D,S>(*d, *holder_, String<D>::font_);
   }
 private:
   ::gos::atl::buffer::Holder<S>* holder_;
@@ -287,7 +287,7 @@ public:
     request();
   }
   void render(D* d) {
-    details::line::two<D, S>(*d, one_, two_, String<D>::font_);
+    details::line::two<D, S>(*d, *one_, *two_, String<D>::font_);
   }
 private:
   ::gos::atl::buffer::Holder<S>* one_;
