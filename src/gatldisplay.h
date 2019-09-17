@@ -56,26 +56,111 @@ namespace display {
 
 typedef u8g2_uint_t u8g2_point_t;
 
+namespace details {
+template<class D = DISPLAY_DEFAULT>
+void logo(D& d, u8g2_uint_t w, u8g2_uint_t h, const uint8_t *bitmap) {
+  d.drawXBMP(
+    0,  /* x */
+    0,  /* y */
+    w,
+    h,
+    bitmap);
+}
+namespace line {
+template<class D = DISPLAY_DEFAULT> void one(
+  D& d,
+  const char* message,
+  const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
+  d.setFont(font);
+  d.drawStr(DISPLAY_ONE_LINE_X, DISPLAY_ONE_LINE_Y, message);
+}
+template<class D = DISPLAY_DEFAULT, typename S = uint8_t> void one(
+  D& d,
+  ::gos::atl::buffer::Holder<S>& holder,
+  const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
+  one<D>(d, holder.Buffer, font);
+}
+template<class D = DISPLAY_DEFAULT> void two(
+  D& d,
+  const char* messageone,
+  const char* messagetwo,
+  const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
+  d->setFont(font);
+  d->drawStr(0, DISPLAY_TWO_LINES_Y1, messageone);
+  d->setFont(font);
+  d->drawStr(0, DISPLAY_TWO_LINES_Y2, messagetwo);
+}
+template<class D = DISPLAY_DEFAULT, typename S = uint8_t> void two(
+  D& d,
+  ::gos::atl::buffer::Holder<S>& holderone,
+  ::gos::atl::buffer::Holder<S>& holdertwo,
+  const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
+  two<D>(d, holderone.Buffer, holdertwo.Buffer, font);
+}
+}
+}
+
 template<class D = DISPLAY_DEFAULT> class Oled {
 public:
   Oled() {
     U8g2 = new D(U8G2_R0);
   }
-  void logo(u8g2_uint_t w, u8g2_uint_t h, const uint8_t *bitmap) {
-    // picture loop
-    U8g2->firstPage();
-    do {
-      U8g2->drawXBMP(
-        0,  /* x */
-        0,  /* y */
-        w,
-        h,
-        bitmap);
-    } while (U8g2->nextPage());
-  }
   D* U8g2;
 };
 
+namespace synchronous {
+template<class D = DISPLAY_DEFAULT>
+void logo(Oled<D>& oled, u8g2_uint_t w, u8g2_uint_t h, const uint8_t *bitmap) {
+  // picture loop
+  oled.U8g2->firstPage();
+  do {
+    details::logo<D>(oled.U8g2, w, h, bitmap);
+  } while (oled.U8g2->nextPage());
+}
+namespace line {
+template<class D = DISPLAY_DEFAULT>
+void one(
+  Oled<D>& oled,
+  const char* message,
+  const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
+  oled.U8g2->firstPage();
+  do {
+    details::line::one<D>(oled.U8g2, message, font);
+  } while (oled.U8g2->nextPage());
+}
+template<class D = DISPLAY_DEFAULT, typename S = uint8_t>
+void one(
+  Oled<D>& oled,
+  ::gos::atl::buffer::Holder<S>& holder,
+  const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
+  one<D>(oled, holder, font);
+}
+template<class D = DISPLAY_DEFAULT>
+void two(
+  Oled<D>& oled,
+  const char* one,
+  const char* two,
+  const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
+  oled.U8g2->firstPage();
+  do {
+    details::line::two<D>(oled.U8g2, one, two, font);
+  } while (oled.U8g2->nextPage());
+}
+template<class D = DISPLAY_DEFAULT, typename S = uint8_t>
+void two(
+  Oled<D>& oled,
+  ::gos::atl::buffer::Holder<S>& one,
+  ::gos::atl::buffer::Holder<S>& two,
+  const uint8_t *font = DISPLAY_FONT_ONE_LINE) {
+  oled.U8g2->firstPage();
+  do {
+    details::line::two<D>(oled.U8g2, one, two, font);
+  } while (oled.U8g2->nextPage());
+}
+}
+}
+
+namespace asynchronous {
 template<class D = DISPLAY_DEFAULT> class Render {
 public:
   Render(Oled<D>& oled) :
@@ -91,7 +176,7 @@ public:
         starting_ = false;
       }
       render(oled_.U8g2);
-      if(!oled_.U8g2->nextPage()) {
+      if (!oled_.U8g2->nextPage()) {
         request_ = false;
       }
     }
@@ -106,11 +191,30 @@ private:
   Oled<D>& oled_;
 };
 
+template<class D = DISPLAY_DEFAULT> class Logo : public Render<D> {
+public:
+  Logo(Oled<D>& oled) : Render<D>(oled), w_(0), h_(0), bitmap_(nullptr) {
+  }
+  void display(u8g2_uint_t w, u8g2_uint_t h, const uint8_t *bitmap) {
+    w_ = w;
+    h_ = h;
+    bitmap_ = bitmap;
+    request();
+  }
+  void render(D* d) {
+    details::logo<D>(*d, w_, h_, bitmap_);
+  }
+private:
+  u8g2_uint_t w_;
+  u8g2_uint_t h_;
+  const uint8_t *bitmap_;
+};
+
 template<
   class D = DISPLAY_DEFAULT,
   typename I = uint8_t,
   typename P = u8g2_point_t>
-class Graph : public Render<D> {
+  class Graph : public Render<D> {
 public:
   Graph(Oled<D>& oled, const P& dx = 2) :
     Render<D>(oled),
@@ -155,15 +259,15 @@ namespace line {
 template<class D = DISPLAY_DEFAULT, typename S = uint8_t>
 class One : public String<D> {
 public:
-  One(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_ONE_LINE) : String<D>(oled, font) {
+  One(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_ONE_LINE) :
+    String<D>(oled, font) {
   }
   void display(::gos::atl::buffer::Holder<S>& holder) {
     holder_ = &holder;
     request();
   }
   void render(D* d) {
-    d->setFont(String<D>::font_);
-    d->drawStr(DISPLAY_ONE_LINE_X, DISPLAY_ONE_LINE_Y, holder_->Buffer);
+    details::line::one<D,S>(*d, holder_, String<D>::font_);
   }
 private:
   ::gos::atl::buffer::Holder<S>* holder_;
@@ -172,7 +276,8 @@ private:
 template<class D = DISPLAY_DEFAULT, typename S = uint8_t>
 class Two : public String<D> {
 public:
-  Two(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_TWO_LINES) : String<D>(oled, font) {
+  Two(Oled<D>& oled, const uint8_t *font = DISPLAY_FONT_TWO_LINES) :
+    String<D>(oled, font) {
   }
   void display(
     ::gos::atl::buffer::Holder<S>& one,
@@ -182,15 +287,14 @@ public:
     request();
   }
   void render(D* d) {
-    d->setFont(String<D>::font_);
-    d->drawStr(0, DISPLAY_TWO_LINES_Y1, one_->Buffer);
-    d->setFont(String<D>::font_);
-    d->drawStr(0, DISPLAY_TWO_LINES_Y2, two_->Buffer);
+    details::line::two<D, S>(*d, one_, two_, String<D>::font_);
   }
 private:
   ::gos::atl::buffer::Holder<S>* one_;
   ::gos::atl::buffer::Holder<S>* two_;
 };
+
+}
 
 }
 
