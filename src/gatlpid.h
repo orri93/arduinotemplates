@@ -120,7 +120,7 @@ template<typename V, typename I = V, typename O = V> void initialize(
   const O& output = O()) {
   variable.LastInput = static_cast<V>(input);
   variable.OutputSum =
-    static_cast<V>(::gos::atl::utility::restrict(output, range));
+    static_cast<V>(::gos::atl::utility::range::restrict(output, range));
 }
 
 template<typename I, typename O = I, typename P = I, typename V = I>
@@ -141,7 +141,7 @@ O compute(
   if (!parameter.PonE) {
     variable.OutputSum -= di * static_cast<V>(parameter.Kp);
   }
-  variable.OutputSum = ::gos::atl::utility::restrict(
+  variable.OutputSum = ::gos::atl::utility::range::restrict(
     variable.OutputSum, parameter.Range);
   V output = parameter.PonE ? static_cast<V>(parameter.Kp) * error : V();
 #ifndef GATL_PID_TUNING_IN_MS
@@ -149,7 +149,7 @@ O compute(
 #else
   output += variable.OutputSum - V(1000) * parameter.KdDividedByTime * di;
 #endif
-  return ::gos::atl::utility::restrict(
+  return ::gos::atl::utility::range::restrict(
     static_cast<O>(output),
     parameter.Range);
 }

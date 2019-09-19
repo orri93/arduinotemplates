@@ -9,18 +9,94 @@ namespace gos {
 namespace atl {
 namespace utility {
 
-template<typename T> T restrict(const T& value, const T& minimum, const T& maximum) {
-  if (value >= minimum && value <= maximum) {
+namespace range {
+
+template<typename T> bool isinside(
+  const T& value,
+  const T& lowest,
+  const T& highest) {
+  return value >= lowest && value <= highest;
+}
+
+template<typename T> bool isinside(
+  const T& value,
+  ::gos::atl::type::range<T>& range) {
+  return isinside(range.lowest, range.highest);
+}
+
+template<typename T> bool ismemberof(
+  const T& value,
+  const T& first,
+  const T& length) {
+  return value >= first && value < first + length;
+}
+
+template<typename T> bool ismemberof(
+  const T& value,
+  ::gos::atl::type::range<T>& range) {
+  return ismemberof(value, range.lowest, range.highest);
+}
+
+template<typename T> T restrict(
+  const T& value,
+  const T& minimum,
+  const T& maximum){
+  if (isinside(value, minimum, maximum)) {
     return value;
-  } else if (value > maximum) {
+  }
+ else if (value > maximum) {
     return maximum;
-  } else {
+  }
+  else {
     return minimum;
   }
 }
 
-template<typename T> T restrict(const T& value, const ::gos::atl::type::range<T>& range) {
+template<typename T> T restrict(
+  const T& value,
+  const ::gos::atl::type::range<T>& range){
   return restrict(value, range.lowest, range.highest);
+}
+}
+
+namespace number {
+
+namespace part {
+template<typename P = uint8_t, typename N = uint16_t>
+P first(const N& number) {
+  P part;
+  memcpy(
+    static_cast<void*>(&part),
+    static_cast<const void*>(&number),
+    sizeof(P));
+  return part;
+}
+
+template<typename P = uint8_t, typename N = uint16_t>
+P second(const N& number) {
+  P part;
+  memcpy(
+    static_cast<void*>(&part),
+    static_cast<const void*>(reinterpret_cast<const char*>(&number) + sizeof(P)),
+    sizeof(P));
+  return part;
+}
+
+template<typename P = uint8_t, typename N = uint16_t>
+N combine(const P& first, const P& second) {
+  N number;
+  memcpy(
+    static_cast<void*>(&number),
+    static_cast<const void*>(&first),
+    sizeof(P));
+  memcpy(
+    static_cast<void*>(reinterpret_cast<char*>(&number) + sizeof(P)),
+    static_cast<const void*>(&second),
+    sizeof(P));
+  return number;
+}
+
+}
 }
 
 }
