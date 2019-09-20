@@ -24,6 +24,29 @@ template<typename T> bool isinside(
   return isinside(range.lowest, range.highest);
 }
 
+template<typename T> bool isoneinside(
+  std::vector<T>& values,
+  const T& lowest,
+  const T& highest) {
+  for (std::vector<T>::iterator it = values.begin(); it != values.end(); it++) {
+    if (isinside(*it, lowest, highest)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template<typename T> bool isoneinside(
+  std::vector<T>& values,
+  ::gos::atl::type::range<T>& range) {
+  for (std::vector<T>::iterator it = values.begin(); it != values.end(); it++) {
+    if (isinside(*it, range)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 template<typename T> bool ismemberof(
   const T& value,
   const T& first,
@@ -35,6 +58,54 @@ template<typename T> bool ismemberof(
   const T& value,
   ::gos::atl::type::range<T>& range) {
   return ismemberof(value, range.lowest, range.highest);
+}
+
+template<typename T, typename I> bool isonememberof(
+  const T* values,
+  const I& count,
+  const T& first,
+  const T& length) {
+  for (I i = 0; i < count; i++) {
+    if (ismemberof(values[i], first, length)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template<typename T, typename I> bool isonememberof(
+  const T* values,
+  const I& count,
+  ::gos::atl::type::range<T>& range) {
+  for (I i = 0; i < count; i++) {
+    if (ismemberof(values[i], range)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template<typename T> bool isonememberof(
+  const std::vector<T>& values,
+  const T& first,
+  const T& length) {
+  for (std::vector<T>::iterator it = values.begin(); it != values.end(); it++) {
+    if (ismemberof(*it, first, length)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template<typename T> bool isonememberof(
+  const std::vector<T>& values,
+  ::gos::atl::type::range<T>& range) {
+  for (std::vector<T>::iterator it = values.begin(); it != values.end(); it++) {
+    if (ismemberof(*it, range)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 template<typename T> T restrict(
@@ -62,6 +133,9 @@ template<typename T> T restrict(
 namespace number {
 
 namespace part {
+
+enum class type { first, second };
+
 template<typename P = uint8_t, typename N = uint16_t>
 P first(const N& number) {
   P part;
@@ -80,6 +154,26 @@ P second(const N& number) {
     static_cast<const void*>(reinterpret_cast<const char*>(&number) + sizeof(P)),
     sizeof(P));
   return part;
+}
+
+template<typename P = uint8_t, typename N = uint16_t> void apply(
+  N& number,
+  const P& part,
+  const ::gos::atl::utility::number::part::type& type) {
+  switch (type) {
+  case ::gos::atl::utility::number::part::type::first:
+    memcpy(
+      static_cast<void*>(&number),
+      static_cast<const void*>(&part),
+      sizeof(P));
+    break;
+  case ::gos::atl::utility::number::part::type::second:
+    memcpy(
+      static_cast<void*>(reinterpret_cast<char*>(&number) + sizeof(P)),
+      static_cast<const void*>(&part),
+      sizeof(P));
+    break;
+  }
 }
 
 template<typename P = uint8_t, typename N = uint16_t>
