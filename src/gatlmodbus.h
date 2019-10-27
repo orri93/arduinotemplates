@@ -5,200 +5,157 @@
 
 #include <ModbusSlave.h>
 
+#include <gatlbinding.h>
 #include <gatlutility.h>
 
-#define _GOS_ARDUINO_TEMPLATE_LIBRARY_MODBUS_TYPE_SIZE_(x) (sizeof(x)>2?2:1)
+#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_MODBUS_TESTING
+#include <cassert>
+#endif
 
 namespace gos {
 namespace atl {
 namespace modbus {
 
-template<typename T> struct Binding {
-  uint16_t address;
-  T* reference;
-};
-
-template<typename T> struct Bindings {
-  Binding<T>* bindings;
-  uint16_t first;
-  uint8_t count;
-};
-
 namespace detail {
-template<typename T> void next(uint16_t& address) {
-  address += _GOS_ARDUINO_TEMPLATE_LIBRARY_MODBUS_TYPE_SIZE_(T);
-}
 template<typename T> void initialize(
-  const Bindings<T>& bindings,
-  uint16_t& start,
-  uint16_t& lastlength,
-  uint8_t& index,
-  uint8_t& offset) {
-  uint8_t delta = abs(start - bindings.first);
-  offset = 0;
-  index = 0;
-  if (bindings.first > start) {
-    lastlength -= delta;
-    offset += delta;
-    start = bindings.first;
-  } else if (bindings.first < start) {
-    index += delta;
+  // Binding
+  const ::gos::atl::binding::reference<T, uint16_t, uint8_t>& reference,
+  const uint16_t& start,        // Start address for the modbus function
+  const uint16_t& length,       // Length for the modbus function
+  uint8_t& offset,              // Offset in the modbus buffer
+  uint8_t& from,                // First binding index
+  uint8_t& to) {                // Last binding index + 1 covered
+  from = 1; to = 0;
+  if (reference.first >= start) {
+    if (reference.first < (start + length)) {
+      //    smmmme
+      //    fbbbbbbl
+      //
+      //    smmmme
+      //      fbbbbl
+      from = 0;
+      offset = reference.first - start;
+      to = (start + length - reference.first) / reference.size;
+    }
+  } else if ((reference.first + reference.count * reference.size) > start) {
+    //      smmmme
+    //    fbbbbl
+    offset = 0;
+    from = ((start - reference.first) % reference.size > 0) +
+      (start - reference.first) / reference.size;
+    to = from + ((start - reference.first) % reference.size == 0) +
+      ((reference.first - 1 + (reference.count * reference.size)) - start) /
+      reference.size;
   }
-  lastlength += offset;
 }
-}
-
-#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_MODBUS_TESTING
-template<typename T> void clean(Bindings<T>& bindings) {
-  delete bindings.bindings;
-  bindings.bindings = nullptr;
-}
-template<typename T> uint8_t range(const Bindings<T>& bindings,
-  uint16_t start,
-  uint16_t lastlength,
-  uint8_t& index,
-  uint8_t& offset) {
-  detail::initialize(bindings, start, lastlength, index, offset);
-  uint8_t count = 0;
-  uint8_t tin = index;
-  uint8_t tof = offset;
-  while (tin < bindings.count && tof < lastlength) {
-    tof++;
-    tin++;
-    count++;
-  }
-  return count;
-}
-#endif
-
-template<typename T> void create(
-  Bindings<T>& bindings,
-  uint8_t count,
-  uint16_t& address,
-  T* reference) {
-  bindings.count = count;
-  bindings.first = address;
-  bindings.bindings = (Binding<T>*)(malloc(sizeof(Binding<T>) * count));
-  bindings.bindings->address = address;
-  bindings.bindings->reference = reference;
-  detail::next<T>(address);
-}
-
-template<typename T> void add(
-  Bindings<T>& bindings, uint8_t& index, uint16_t& address, T* reference) {
-  bindings.bindings[index].address = address;
-  bindings.bindings[index].reference = reference;
-  detail::next<T>(address);
-  index++;
 }
 
 namespace coil {
 template<typename T> void access(
-  Bindings<T>& bindings,
+  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
   Modbus& modbus,
-  uint16_t start,
-  uint16_t lastlength) {
-  uint8_t offset, index;
-  detail::initialize(bindings, start, lastlength, index, offset);
-  while (index < bindings.count && offset < lastlength) {
-    modbus.writeCoilToBuffer(offset++, *(bindings.bindings[index++].reference));
+  const uint16_t& startaddress,
+  const uint16_t& length) {
+  uint8_t offset, from, to;
+  detail::initialize(binding, startaddress, length, offset, from, to);
+  while (from < to) {
+    modbus.writeCoilToBuffer(offset++, *(binding.pointers[from++]));
   }
 }
 template<typename T> void assign(
-  Bindings<T>& bindings,
+  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
   Modbus& modbus,
-  uint16_t start,
-  uint16_t lastlength) {
-  uint8_t offset, index;
-  detail::initialize(bindings, start, lastlength, index, offset);
-  while (index < bindings.count && offset < lastlength) {
-    *(bindings.bindings[index++].reference) =
-      modbus.readCoilFromBuffer(offset++);
-  }
-}
-}
-
-namespace registers {
-template<typename T> void access(
-  Bindings<T>& bindings,
-  Modbus& modbus,
-  uint16_t start,
-  uint16_t lastlength) {
-  uint8_t offset, index;
-  detail::initialize(bindings, start, lastlength, index, offset);
-  while (index < bindings.count && offset < lastlength) {
-    modbus.writeRegisterToBuffer(
-      offset++,
-      *(bindings.bindings[index++].reference));
-  }
-}
-template<typename T> void assign(
-  Bindings<T>& bindings,
-  Modbus& modbus,
-  uint16_t start,
-  uint16_t lastlength) {
-  uint8_t offset, index;
-  detail::initialize(bindings, start, lastlength, index, offset);
-  while (index < bindings.count && offset < lastlength) {
-    *(bindings.bindings[index++].reference) =
-      modbus.readRegisterFromBuffer(offset++);
+  const uint16_t& startaddress,
+  const uint16_t& length,
+  uint8_t& from,
+  uint8_t& to) {
+  uint8_t offset;
+  detail::initialize(binding, startaddress, length, offset, from, to);
+  while (from < to) {
+    *(binding.pointers[from++]) = modbus.readCoilFromBuffer(offset++);
   }
 }
 }
 
 namespace discrete {
 template<typename T> void access(
-  Bindings<T>& bindings,
+  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
   Modbus& modbus,
-  uint16_t start,
-  uint16_t lastlength) {
-  uint8_t offset, index;
-  detail::initialize(bindings, start, lastlength, index, offset);
-  while (index < bindings.count && offset < lastlength) {
-    modbus.writeDiscreteInputToBuffer(
-      offset++,
-      *(bindings.bindings[index++].reference));
+  const uint16_t& startaddress,
+  const uint16_t& length) {
+  uint8_t offset, from, to;
+  detail::initialize(binding, startaddress, length, offset, from, to);
+  while (from < to) {
+    modbus.writeDiscreteInputToBuffer(offset++, *(binding.pointers[from++]));
+  }
+}
+}
+
+namespace registers {
+template<typename T> void access(
+  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
+  Modbus& modbus,
+  const uint16_t& startaddress,
+  const uint16_t& length) {
+  uint8_t offset, from, to;
+  detail::initialize(binding, startaddress, length, offset, from, to);
+  while (from < to) {
+    modbus.writeRegisterToBuffer(offset++, *(binding.pointers[from++]));
+  }
+}
+template<typename T> void assign(
+  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
+  Modbus& modbus,
+  const uint16_t& startaddress,
+  const uint16_t& length,
+  uint8_t& from,
+  uint8_t& to) {
+  uint8_t offset;
+  detail::initialize(binding, startaddress, length, offset, from, to);
+  while (from < to) {
+    *(binding.pointers[from++]) = modbus.readRegisterFromBuffer(offset++);
   }
 }
 }
 
 namespace two {
 template<typename T> void access(
-  Bindings<T>& bindings,
+  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
   Modbus& modbus,
-  uint16_t start,
-  uint16_t lastlength) {
-  uint8_t offset, index;
-  detail::initialize(bindings, start, lastlength, index, offset);
-  while (index < bindings.count && offset < lastlength) {
+  const uint16_t& startaddress,
+  const uint16_t& length) {
+  uint8_t offset, from, to;
+  detail::initialize(binding, startaddress, length, offset, from, to);
+  while (from < to) {
     modbus.writeRegisterToBuffer(
       offset++, ::gos::atl::utility::number::part::first<uint16_t, T>(
-        *(bindings.bindings[index].reference)));
+        *(binding.pointers[from])));
     modbus.writeRegisterToBuffer(
       offset++, ::gos::atl::utility::number::part::second<uint16_t, T>(
-        *(bindings.bindings[index].reference)));
-    index++;
+        *(binding.pointers[from])));
+    from++;
   }
 }
 template<typename T> void assign(
-  Bindings<T>& bindings,
+  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
   Modbus& modbus,
-  uint16_t start,
-  uint16_t lastlength) {
-  uint8_t offset, index;
-  detail::initialize(bindings, start, lastlength, index, offset);
-  while (index < bindings.count && offset < lastlength) {
-    *(bindings.bindings[index].reference) =
+  const uint16_t& startaddress,
+  const uint16_t& length,
+  uint8_t& from,
+  uint8_t& to) {
+  uint8_t offset;
+  detail::initialize(binding, startaddress, length, offset, from, to);
+  while (from < to) {
+    *(binding.pointers[from]) =
       ::gos::atl::utility::number::part::combine<uint16_t, T>(
       modbus.readRegisterFromBuffer(offset),
       modbus.readRegisterFromBuffer(offset + 1)
       );
     offset += 2;
-    index++;
+    from++;
   }
 }
 }
-
 
 }
 }
