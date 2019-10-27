@@ -5,6 +5,10 @@
 
 #include <gatltype.h>
 
+#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_UTILITY_VECTOR_SUPPORT
+#include <vector>
+#endif
+
 namespace gos {
 namespace atl {
 namespace utility {
@@ -24,6 +28,7 @@ template<typename T> bool isinside(
   return isinside(range.lowest, range.highest);
 }
 
+#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_UTILITY_VECTOR_SUPPORT
 template<typename T> bool isoneinside(
   std::vector<T>& values,
   const T& lowest,
@@ -46,6 +51,7 @@ template<typename T> bool isoneinside(
   }
   return false;
 }
+#endif
 
 template<typename T> bool ismemberof(
   const T& value,
@@ -85,6 +91,7 @@ template<typename T, typename I> bool isonememberof(
   return false;
 }
 
+#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_UTILITY_VECTOR_SUPPORT
 template<typename T> bool isonememberof(
   const std::vector<T>& values,
   const T& first,
@@ -107,6 +114,7 @@ template<typename T> bool isonememberof(
   }
   return false;
 }
+#endif
 
 template<typename T> T restrict(
   const T& value,
