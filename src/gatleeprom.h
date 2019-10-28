@@ -1,7 +1,13 @@
 #ifndef _GOS_ARDUINO_TEMPLATE_LIBRARY_EEPROM_H_
 #define _GOS_ARDUINO_TEMPLATE_LIBRARY_EEPROM_H_
 
+#define USE_AVR_EEPROM
+
+#ifdef USE_AVR_EEPROM
+#include <avr/eeprom.h>
+#else
 #include <EEPROM.h>
+#endif
 
 #include <gatlbinding.h>
 #include <gatlutility.h>
@@ -28,7 +34,11 @@ template<typename T>
 int read(const uint8_t& size, int index, T* pointer) {
   uint8_t* cp = (uint8_t*)(pointer);
   for (uint8_t i = 0; i < size; i++) {
+#ifdef USE_AVR_EEPROM
+    * (cp++) = eeprom_read_byte(index++);
+#else
     *(cp++) = EEPROM.read(index++);
+#endif
   }
   return index;
 }
