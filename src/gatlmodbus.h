@@ -16,6 +16,10 @@ namespace gos {
 namespace atl {
 namespace modbus {
 
+template<typename T, typename S = uint8_t> S size() {
+  return sizeof(T) / 2;
+}
+
 namespace detail {
 template<typename T> void initialize(
   // Binding

@@ -15,6 +15,10 @@ struct reference {
   I size;            // Size of each references in either byte or registry count
 };
 
+template<typename T, typename R, typename S = uint8_t> S size() {
+  return sizeof(T) / sizeof(R);
+}
+
 #ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_BINDING_TESTING
 namespace testing {
 template<typename T, typename A = uint16_t, typename I = uint8_t>
