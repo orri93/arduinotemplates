@@ -66,7 +66,7 @@ int read(const uint8_t& size, int index, T* pointer) {
 }
 
 template<typename S = uint8_t, typename A = uint16_t>
-int read(
+void read(
   ::gos::atl::buffer::Holder<S>& buffer,
   const A& address,
   const S& size) {
@@ -76,7 +76,7 @@ int read(
     (size_t)size);
 }
 template<typename S = uint8_t, typename A = uint16_t>
-int update(
+void update(
   const ::gos::atl::buffer::Holder<S>& buffer,
   const A& address,
   const S& size) {
@@ -86,7 +86,7 @@ int update(
     (size_t)size);
 }
 template<typename S = uint8_t, typename A = uint16_t>
-int write(
+void write(
   const ::gos::atl::buffer::Holder<S>& buffer,
   const A& address,
   const S& size) {
