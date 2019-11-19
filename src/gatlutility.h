@@ -24,9 +24,13 @@ bool is(
     if (abs(value - optional.get()) > threshold) {
       optional.assign(value);
       return true;
+    } else {
+      return false;
     }
+  } else {
+    optional.assign(value);
+    return true;
   }
-  return false;
 }
 template<typename T>
 bool is(const T& value, ::gos::atl::type::optional<T>& optional) {
