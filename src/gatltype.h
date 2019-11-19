@@ -19,17 +19,37 @@ template<typename T> range<T> make_range(const T& lowest, const T& highest) {
   return range;
 }
 
+#ifdef NOT_USED
+namespace details {
+template <typename T> class comparable {
+public:
+  friend bool operator==(T const& lhs, T const& rhs) { return lhs == rhs; }
+  friend bool operator!=(T const& lhs, T const& rhs) { return rhs != lhs; }
+};
+}
+#endif
+
 template<typename T>
 class optional {
-public:
-  friend bool operator == (const optional<T>& rhs, const optional<T>& lhs);
-  friend bool operator =! (const optional<T>& rhs, const optional<T>& lhs);
+  friend bool operator == (optional<T> const& l, optional<T> const& r) {
+    return (l.p_ != nullptr && r.p_ != nullptr) ? (*l.p_ == *r.p_) : false;
+  }
+  friend bool operator !=(optional<T> const & rhs, optional<T> const & lhs) {
+    if (lhs.p_ != nullptr && rhs.p_ != nullptr) {
+      return *lhs.p_ != *rhs.p_;
+    } else if (lhs.p_ != nullptr || rhs.p_ != nullptr) {
+      return true;
+    } else {
+      return false;
+    }
+  }
 #ifdef NOT_USED
   friend bool operator > (const optional<T>& rhs, const optional<T>& lhs);
   friend bool operator >= (const optional<T>& rhs, const optional<T>& lhs);
   friend bool operator < (const optional<T>& rhs, const optional<T>& lhs);
   friend bool operator <= (const optional<T>& rhs, const optional<T>& lhs);
 #endif
+public:
   optional() : p_(nullptr) {}
   optional(const T& value) : p_(new T(value)) {}
   optional(const optional& optional) = delete;
@@ -49,6 +69,7 @@ public:
   }
   optional& operator=(const T& value) {
     assign(value);
+    return *this;
   }
   bool operator==(const T& value) const {
     return isequal(value);
@@ -97,23 +118,6 @@ protected:
 
 }
 }
-}
-
-template<typename T> bool operator==(
-  const ::gos::atl::type::optional<T>& lhs,
-  const ::gos::atl::type::optional<T>& rhs) {
-  return lhs.p_ != nullptr && rhs.p_ != nullptr ? (*lhs.p_ == *rhs.p_) : false;
-}
-template<typename T> bool operator!=(
-  const ::gos::atl::type::optional<T>& lhs,
-  const ::gos::atl::type::optional<T>& rhs) {
-  if (lhs.p_ != nullptr && rhs.p_ != nullptr) {
-    return *lhs.p_ != *rhs.p_;
-  } else if (lhs.p_ != nullptr || rhs.p_ != nullptr) {
-    return true;
-  } else {
-    return false;
-  }
 }
 
 #endif

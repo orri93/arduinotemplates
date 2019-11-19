@@ -30,7 +30,7 @@ bool is(
 }
 template<typename T>
 bool is(const T& value, ::gos::atl::type::optional<T>& optional) {
-  if (optional.isunequal()) {
+  if (optional.isunequal(value)) {
     optional.assign(value);
     return true;
   }
@@ -67,7 +67,7 @@ template<typename T> bool isinside(
 template<typename T> bool isinside(
   const T& value,
   ::gos::atl::type::range<T>& range) {
-  return isinside(range.lowest, range.highest);
+  return isinside(value, range.lowest, range.highest);
 }
 
 #ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_UTILITY_VECTOR_SUPPORT

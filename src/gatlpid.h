@@ -141,8 +141,8 @@ O compute(
   if (!parameter.PonE) {
     variable.OutputSum -= di * static_cast<V>(parameter.Kp);
   }
-  variable.OutputSum = ::gos::atl::utility::range::restrict<O>(
-    variable.OutputSum, parameter.Range);
+  variable.OutputSum = static_cast<V>(::gos::atl::utility::range::restrict<O>(
+    static_cast<O>(variable.OutputSum), parameter.Range));
   V output = parameter.PonE ? static_cast<V>(parameter.Kp) * error : V();
 #ifndef GATL_PID_TUNING_IN_MS
   output += variable.OutputSum - variable.KdDividedByTime * di;
