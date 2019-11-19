@@ -56,43 +56,47 @@ template<typename T> bool initialize(
 }
 
 namespace coil {
-template<typename T> void access(
+template<typename T> bool access(
   ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
   Modbus& modbus,
   const uint16_t& startaddress,
   const uint16_t& length) {
   uint8_t offset, from, to;
-  detail::initialize(binding, startaddress, length, offset, from, to);
+  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
   while (from < to) {
     modbus.writeCoilToBuffer(offset++, *(binding.pointers[from++]));
   }
+  return re;
 }
-template<typename T> void assign(
+template<typename T> bool assign(
   ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
   Modbus& modbus,
   const uint16_t& startaddress,
   const uint16_t& length,
   uint8_t& from,
   uint8_t& to) {
-  uint8_t offset;
-  detail::initialize(binding, startaddress, length, offset, from, to);
-  while (from < to) {
-    *(binding.pointers[from++]) = modbus.readCoilFromBuffer(offset++);
+  uint8_t offset, index;
+  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
+  index = from;
+  while (index < to) {
+    *(binding.pointers[index++]) = modbus.readCoilFromBuffer(offset++);
   }
+  return re;
 }
 }
 
 namespace discrete {
-template<typename T> void access(
+template<typename T> bool access(
   ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
   Modbus& modbus,
   const uint16_t& startaddress,
   const uint16_t& length) {
   uint8_t offset, from, to;
-  detail::initialize(binding, startaddress, length, offset, from, to);
+  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
   while (from < to) {
     modbus.writeDiscreteInputToBuffer(offset++, *(binding.pointers[from++]));
   }
+  return re;
 }
 }
 
@@ -116,10 +120,11 @@ template<typename T> bool assign(
   const uint16_t& length,
   uint8_t& from,
   uint8_t& to) {
-  uint8_t offset;
+  uint8_t offset, index;
   bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  while (from < to) {
-    *(binding.pointers[from++]) = modbus.readRegisterFromBuffer(offset++);
+  index = from;
+  while (index < to) {
+    *(binding.pointers[index++]) = modbus.readRegisterFromBuffer(offset++);
   }
   return re;
 }
