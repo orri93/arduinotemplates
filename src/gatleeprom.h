@@ -115,6 +115,24 @@ template<typename T> void read(
   }
 }
 
+template<typename T> void write(
+  ::gos::atl::binding::reference<T, int, uint8_t>& binding,
+  const int& index) {
+  write(binding.size, binding.first + index, binding.pointers[index]);
+}
+
+template<typename T> void update(
+  ::gos::atl::binding::reference<T, int, uint8_t>& binding,
+  const int& index) {
+  update(binding.size, binding.first + index, binding.pointers[index]);
+}
+
+template<typename T> void read(
+  ::gos::atl::binding::reference<T, int, uint8_t>& binding,
+  const int& index) {
+  read(binding.size, binding.first + index, binding.pointers[index]);
+}
+
 }
 }
 }
