@@ -13,6 +13,48 @@ namespace gos {
 namespace atl {
 namespace utility {
 
+namespace changed {
+namespace apply {
+template<typename T>
+bool is(
+  const T& value,
+  ::gos::atl::type::optional<T>& optional,
+  const T& threshold) {
+  if (optional.is()) {
+    if (abs(value - optional.get()) > threshold) {
+      optional.assign(value);
+      return true;
+    }
+  }
+  return false;
+}
+template<typename T>
+bool is(const T& value, ::gos::atl::type::optional<T>& optional) {
+  if (optional.isunequal()) {
+    optional.assign(value);
+    return true;
+  }
+  return false;
+}
+}
+template<typename T>
+bool is(
+  const T& value,
+  const ::gos::atl::type::optional<T>& optional,
+  const T& threshold) {
+  if (optional.is()) {
+    if (abs(value - optional.get()) > threshold) {
+      return true;
+    }
+  }
+  return false;
+}
+template<typename T>
+bool is(const T& value, const ::gos::atl::type::optional<T>& optional) {
+  return optional.isunequal(value);
+}
+}
+
 namespace range {
 
 template<typename T> bool isinside(
