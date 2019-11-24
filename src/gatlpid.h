@@ -15,7 +15,7 @@ template<typename I, typename O = I, typename P = I>
 struct Parameter {
   ::gos::atl::type::range<O> Range;
   I Setpoint;
-  P TimeMs;
+  P Time;
   P Kp;
   bool PonE;
 };
@@ -46,53 +46,29 @@ struct Values {
   V Manual;
 };
 
+namespace time {
+namespace milliseconds {
 template<typename T> T Ki(const T& gain, const T& ti) {
-#ifndef GATL_PID_TUNING_TIME_IN_MIN
-  return gain / ti;
-#else
-  return gain / (T(60) * ti);
-#endif
+  return gain / (ti / T(1000));
 }
-
 template<typename T> T Kd(const T& gain, const T& td) {
-#ifndef GATL_PID_TUNING_TIME_IN_MIN
-  return gain * td;
-#else
-  return gain * (T(60) * td);
-#endif
+  return gain * (td / T(1000));
 }
-
 template<typename T> T Ti(const T& kp, const T& ki) {
-#ifndef GATL_PID_TUNING_TIME_IN_MIN
-  return kp / ki;
-#else
-  return (kp / ki) / T(60);
-#endif
+  return T(1000) * kp / ki;
 }
-
 template<typename T> T Td(const T& kp, const T& kd) {
-#ifndef GATL_PID_TUNING_TIME_IN_MIN
-  return kd / kp;
-#else
-  return (kd / kp) / T(60);
-#endif
+  return T(1000) * kd / kp;
 }
-
 template<typename V, typename I = V, typename O = V, typename P = V>
 void tunings(
   Variable<V>& variable,
   const Parameter<I, O, P>& parameter,
   const P& ki,
   const P& kd) {
-#ifndef GATL_PID_TUNING_IN_MS
-  variable.KiTimesTime = static_cast<V>(ki * (parameter.TimeMs / P(1000)));
-  variable.KdDividedByTime = static_cast<V>(kd / (parameter.TimeMs / P(1000)));
-#else
-  variable.KiTimesTime = static_cast<V>(ki * parameter.TimeMs);
-  variable.KdDividedByTime = static_cast<V>(kd / parameter.TimeMs);
-#endif
+  variable.KiTimesTime = static_cast<V>(ki * (parameter.Time/ P(1000)));
+  variable.KdDividedByTime = static_cast<V>(kd / (parameter.Time / P(1000)));
 }
-
 template<typename V, typename I = V, typename O = V, typename P = V>
 void tunings(
   Variable<V>& variable,
@@ -100,7 +76,6 @@ void tunings(
   const Tune<P>& tune) {
   tunings(variable, parameter, tune.Ki, tune.Kd);
 }
-
 template<typename V, typename I = V, typename O = V, typename P = V>
 void tunings(
   Variable<V>& variable,
@@ -111,6 +86,90 @@ void tunings(
     parameter,
     Ki(parameter.Kp, tune.Ti),
     Kd(parameter.Kp, tune.Td));
+}
+}
+namespace seconds {
+template<typename T> T Ki(const T& gain, const T& ti) {
+  return gain / ti;
+}
+template<typename T> T Kd(const T& gain, const T& td) {
+  return gain * td;
+}
+template<typename T> T Ti(const T& kp, const T& ki) {
+  return kp / ki;
+}
+template<typename T> T Td(const T& kp, const T& kd) {
+  return kd / kp;
+}
+template<typename V, typename I = V, typename O = V, typename P = V>
+void tunings(
+  Variable<V>& variable,
+  const Parameter<I, O, P>& parameter,
+  const P& ki,
+  const P& kd) {
+  variable.KiTimesTime = static_cast<V>(ki * parameter.Time);
+  variable.KdDividedByTime = static_cast<V>(kd / parameter.Time);
+}
+template<typename V, typename I = V, typename O = V, typename P = V>
+void tunings(
+  Variable<V>& variable,
+  const Parameter<I, O, P>& parameter,
+  const Tune<P>& tune) {
+  tunings(variable, parameter, tune.Ki, tune.Kd);
+}
+template<typename V, typename I = V, typename O = V, typename P = V>
+void tunings(
+  Variable<V>& variable,
+  const Parameter<I, O, P>& parameter,
+  const TimeTune<P>& tune) {
+  tunings(
+    variable,
+    parameter,
+    Ki(parameter.Kp, tune.Ti),
+    Kd(parameter.Kp, tune.Td));
+}
+}
+namespace minutes {
+template<typename T> T Ki(const T& gain, const T& ti) {
+  return gain / (T(60) * ti);
+}
+template<typename T> T Kd(const T& gain, const T& td) {
+  return gain * (T(60) * td);
+}
+template<typename T> T Ti(const T& kp, const T& ki) {
+  return (kp / ki) / T(60);
+}
+template<typename T> T Td(const T& kp, const T& kd) {
+  return (kd / kp) / T(60);
+}
+template<typename V, typename I = V, typename O = V, typename P = V>
+void tunings(
+  Variable<V>& variable,
+  const Parameter<I, O, P>& parameter,
+  const P& ki,
+  const P& kd) {
+  variable.KiTimesTime = static_cast<V>(ki * (P(60) * parameter.Time));
+  variable.KdDividedByTime = static_cast<V>(kd / (P(60) * parameter.TimeMs));
+}
+template<typename V, typename I = V, typename O = V, typename P = V>
+void tunings(
+  Variable<V>& variable,
+  const Parameter<I, O, P>& parameter,
+  const Tune<P>& tune) {
+  tunings(variable, parameter, tune.Ki, tune.Kd);
+}
+template<typename V, typename I = V, typename O = V, typename P = V>
+void tunings(
+  Variable<V>& variable,
+  const Parameter<I, O, P>& parameter,
+  const TimeTune<P>& tune) {
+  tunings(
+    variable,
+    parameter,
+    Ki(parameter.Kp, tune.Ti),
+    Kd(parameter.Kp, tune.Td));
+}
+}
 }
 
 template<typename V, typename I = V, typename O = V> void initialize(
@@ -133,22 +192,14 @@ O compute(
   V i = static_cast<V>(input);
   V di = i - variable.LastInput;
   variable.LastInput = i;
-#ifndef GATL_PID_TUNING_IN_MS
   variable.OutputSum += error * variable.KiTimesTime;
-#else
-  variable.OutputSum += error * parameter.KiTimesTime / V(1000);
-#endif
   if (!parameter.PonE) {
     variable.OutputSum -= di * static_cast<V>(parameter.Kp);
   }
   variable.OutputSum = static_cast<V>(::gos::atl::utility::range::restrict<O>(
     static_cast<O>(variable.OutputSum), parameter.Range));
   V output = parameter.PonE ? static_cast<V>(parameter.Kp) * error : V();
-#ifndef GATL_PID_TUNING_IN_MS
   output += variable.OutputSum - variable.KdDividedByTime * di;
-#else
-  output += variable.OutputSum - V(1000) * parameter.KdDividedByTime * di;
-#endif
   return ::gos::atl::utility::range::restrict<O>(
     static_cast<O>(output),
     parameter.Range);
