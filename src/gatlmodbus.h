@@ -73,6 +73,76 @@
  *
  */
 
+#define MODBUS_INVALID_UNIT_ADDRESS 255
+#define MODBUS_DEFAULT_UNIT_ADDRESS 1
+#define MODBUS_CONTROL_PIN_NONE -1
+
+ /**
+  * Modbus function codes
+  */
+enum {
+  MODBUS_FC_INVALID = 0,
+  MODBUS_FC_READ_COILS = 1,
+  MODBUS_FC_READ_DISCRETE_INPUT = 2,
+  MODBUS_FC_READ_HOLDING_REGISTERS = 3,
+  MODBUS_FC_READ_INPUT_REGISTERS = 4,
+  MODBUS_FC_WRITE_COIL = 5,
+  MODBUS_FC_WRITE_REGISTER = 6,
+  MODBUS_FC_READ_EXCEPTION_STATUS = 7,
+  MODBUS_FC_WRITE_MULTIPLE_COILS = 15,
+  MODBUS_FC_WRITE_MULTIPLE_REGISTERS = 16
+};
+
+enum {
+  MODBUS_CB_MIN = 0,
+  MODBUS_CB_READ_COILS = CB_MIN,
+  MODBUS_CB_READ_DISCRETE_INPUTS,
+  MODBUS_CB_READ_HOLDING_REGISTERS,
+  MODBUS_CB_READ_INPUT_REGISTERS,
+  MODBUS_CB_WRITE_COILS,
+  MODBUS_CB_WRITE_HOLDING_REGISTERS,
+  MODBUS_CB_READ_EXCEPTION_STATUS,
+  MODBUS_CB_MAX
+};
+
+enum {
+  MODBUS_COIL_OFF = 0x0000,
+  MODBUS_COIL_ON = 0xff00
+};
+
+enum {
+  MODBUS_STATUS_OK = 0,
+  MODBUS_STATUS_ILLEGAL_FUNCTION,
+  MODBUS_STATUS_ILLEGAL_DATA_ADDRESS,
+  MODBUS_STATUS_ILLEGAL_DATA_VALUE,
+  MODBUS_STATUS_SLAVE_DEVICE_FAILURE,
+  MODBUS_STATUS_ACKNOWLEDGE,
+  MODBUS_STATUS_SLAVE_DEVICE_BUSY,
+  MODBUS_STATUS_NEGATIVE_ACKNOWLEDGE,
+  MODBUS_STATUS_MEMORY_PARITY_ERROR,
+  MODBUS_STATUS_GATEWAY_PATH_UNAVAILABLE,
+  MODBUS_STATUS_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
+};
+
+#define MODBUS_FRAME_SIZE 4
+#define MODBUS_CRC_LENGTH 2
+
+#define MODBUS_ADDRESS_INDEX 0
+#define MODBUS_FUNCTION_CODE_INDEX 1
+#define MODBUS_DATA_INDEX 2
+
+#define MODBUS_BROADCAST_ADDRESS 0
+#define MODBUS_ADDRESS_MIN 1
+#define MODBUS_ADDRESS_MAX 247
+
+#define MODBUS_HALF_SILENCE_MULTIPLIER 3
+#define MODBUS_FULL_SILENCE_MULTIPLIER 7
+
+#define MODBUS_READ_UINT16(arr, index) word(arr[index], arr[index + 1])
+#define MODBUS_READ_READCRC(arr, length) word(arr[(length - MODBUS_CRC_LENGTH) \
+  + 1], arr[length - MODBUS_CRC_LENGTH])
+
+
 namespace gos {
 namespace atl {
 namespace modbus {
@@ -370,21 +440,69 @@ template<typename T> bool assign(
 
 } // binding namespace
 
+template<
+  typename A = uint8_t,
+  typename F = uint16_t,
+  typename L = uint16_t,
+  typename R = uint8_t>
+class Handler {
+public:
+  typedef A Address;
+  typedef F Function;
+  typedef L Length;
+  typedef R Result;
+  virtual ~Handler() {}
+  virtual Result ReadCoils(
+    const Function& function,
+    const Address& address,
+    const Length& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+  virtual Result ReadHoldingRegisters(
+    const Function& function,
+    const Address& address,
+    const Length& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+  virtual Result ReadInputRegisters(
+    const Function& function,
+    const Address& address,
+    const Length& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+  virtual Result WriteCoils(
+    const Function& function,
+    const Address& address,
+    const Length& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+  virtual Result WriteHoldingRegisters(
+    const Function& function,
+    const Address& address,
+    const Length& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+  virtual Result ReadExceptionStatus(const Function& function) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+};
+
 namespace structures {
-template<typename P, typename A>
+template<typename P = int, typename A = uint8_t>
 struct Parameter {
+  
   typedef A address;
   typedef P pin;
   address SlaveId;
   pin TransmissionControl;
 };
 
-template<typename I>
+template<typename I = uint16_t>
 struct Index {
   typedef I index;
   index ResponseWrite;
 };
-template<typename L>
+template<typename L = uint16_t>
 struct Length {
   typedef L length;
   length TotalSent;
@@ -394,14 +512,14 @@ struct Length {
   length ResponseBuffer;
 };
 
-template<typename S = bool>
+template<typename Bit = bool>
 struct State {
-  typedef S state;
+  typedef Bit state;
   state ResponseBufferWriting;
   state RequestBufferReading;
 };
 
-template<typename M, typename T>
+template<typename M = uint16_t, typename T = uint64_t>
 struct Time {
   typedef M microsecond;
   typedef T time;
@@ -409,7 +527,11 @@ struct Time {
   time LastCommunication;
 };
 
-template<typename I, typename L, typename M, typename T>
+template<
+  typename I = uint16_t,
+  typename L = uint16_t,
+  typename M = uint16_t,
+  typename T = uint64_t>
 struct Variable {
   struct Time<M, T> Time;
   struct Length<L> Length;
@@ -419,26 +541,22 @@ struct Variable {
 }
 
 namespace details {
-namespace callback {
-template<typename A, typename I, typename L, typename R>
-R execute(const I& index, const A& address, const L& length) {
-  if (cbVector[callbackIndex])
-  {
-    return cbVector[callbackIndex](Modbus::readFunctionCode(), address, length);
-  } else
-  {
-    return STATUS_ILLEGAL_FUNCTION;
-  }
-  return R();
-}
-}
 namespace write {
 /**
  * Writes the output buffer to serial stream
  *
  * @return The number of bytes written
  */
-template<typename A, typename C, typename I, typename L, typename M, typename P, typename R, typename S, typename T>
+template<
+  typename A = uint8_t,
+  typename C = uint16_t,
+  typename I = uint16_t,
+  typename L = uint16_t,
+  typename M = uint16_t,
+  typename P = int,
+  typename R = uint8_t,
+  typename S = uint16_t,
+  typename T = uint64_t>
 R response(
   Stream& stream,
   const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
@@ -478,7 +596,7 @@ R response(
     }
 
     // calculate and fill crc
-    C crc = ::gos::atl::utility::crc::calculate(
+    C crc = ::gos::atl::utility::crc::calculate<C, I, S>(
       response,
       variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH);
     response.Buffer[variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH] =
@@ -505,8 +623,8 @@ R response(
 
     if (length > 0) {
       length = stream.write(
-        response.Buffer + variable.Index.ResponseWrite,
-        length);
+        (uint8_t*)(response.Buffer + variable.Index.ResponseWrite),
+        static_cast<size_t>(length));
       variable.Index.ResponseWrite += length;
       variable.Length.TotalSent += length;
     }
@@ -526,8 +644,10 @@ R response(
     length = variable.Length.ResponseBuffer - variable.Index.ResponseWrite;
 
     if (length > 0) {
-      length = serial.write(response.Buffer, length);
-      serial.flush();
+      length = stream.write(
+        (const uint8_t*)(response.Buffer),
+        static_cast<size_t>(length));
+      stream.flush();
     }
 
     variable.Index.ResponseWrite += length;
@@ -554,11 +674,14 @@ R response(
 }
 
 namespace read {
-template<typename V, typename I, typename S>
-V uint16(::gos::atl::buffer::Holder<S, char>& buffer, const I& index) {
-  return T();
-}
-template<typename A, typename I, typename L, typename M, typename P, typename S, typename T>
+template<
+  typename A = uint8_t,
+  typename I = uint16_t,
+  typename L = uint16_t,
+  typename M = uint16_t,
+  typename P = int,
+  typename S = uint16_t,
+  typename T = uint64_t>
 bool request(
   Stream& stream,
   const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
@@ -567,9 +690,9 @@ bool request(
   /**
   * Read one data packet and report when received completely
   */
-  L lenght = stream.available();
+  L length = stream.available();
 
-  if (lenght > L()) {
+  if (length > L()) {
     // if not yet started reading
     if (!variable.Is.RequestBufferReading) {
       // And it already took 1.5T from the last message
@@ -592,14 +715,14 @@ bool request(
       }
 
       // add new bytes to buffer
-      lenght = min(lenght, MODBUS_MAX_BUFFER - variable.Length.RequestBuffer);
-      lenght = stream.readBytes(
+      length = min(length, MODBUS_MAX_BUFFER - variable.Length.RequestBuffer);
+      length = stream.readBytes(
         request.Buffer + variable.Length.RequestBuffer,
-        MODBUS_MAX_BUFFER - variable.Length.RequestBuffer);
+        static_cast<size_t>(MODBUS_MAX_BUFFER - variable.Length.RequestBuffer));
 
       // if this is the first read, check the address to reject irrelevant requests
       if (variable.Length.RequestBuffer == 0 &&
-        lenght > MODBUS_ADDRESS_INDEX &&
+        length > MODBUS_ADDRESS_INDEX &&
         (request.Buffer[MODBUS_ADDRESS_INDEX] != parameter.SlaveId &&
           request.Buffer[MODBUS_ADDRESS_INDEX] != MODBUS_BROADCAST_ADDRESS)) {
         // bad address, stop reading
@@ -629,14 +752,28 @@ bool request(
     }
   }
 
-  return !_isRequestBufferReading && (_requestBufferLength >= MODBUS_FRAME_SIZE);
+  return variable.Is.RequestBufferReading &&
+    (variable.Length.RequestBuffer >= MODBUS_FRAME_SIZE);
 }
 }
+
 namespace validate {
-template<typename A, typename B, typename C, typename I, typename L, typename M, typename P, typename R, typename S, typename T>
-bool request(
-  ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-  ::gos::atl::buffer::Holder<S, char>& request) {
+template<
+  typename A = uint8_t,
+  typename C = uint16_t,
+  typename I = uint16_t,
+  typename L = uint16_t,
+  typename M = uint16_t,
+  typename P = int,
+  typename R = uint8_t,
+  typename S = uint16_t,
+  typename T = uint64_t>
+  bool request(
+    Stream& stream,
+    const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
+    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
+    ::gos::atl::buffer::Holder<S, char>& request,
+    ::gos::atl::buffer::Holder<S, char>& response) {
   // minimum buffer size (1 x Address, 1 x Function, n x Data, 2 x CRC)
   L expectedrequestbuffersize = MODBUS_FRAME_SIZE;
   // check data validity based on the function code
@@ -680,7 +817,13 @@ bool request(
     break;
   default:
     // unknown command
-    report::mexception<R>(STATUS_ILLEGAL_FUNCTION);
+    report::mexception < A, I, L, M, P, R, S, T >(
+      stream,
+      parameter,
+      variable,
+      request,
+      response,
+      MODBUS_STATUS_ILLEGAL_FUNCTION);
     return false;
   }
 
@@ -694,19 +837,29 @@ bool request(
   variable.Length.RequestBuffer = expectedrequestbuffersize;
 
   // check crc
-  C crc = ::gos::atl::utility::crc::read(request, variable.Length.RequestBuffer);
-  return ::gos::atl::utility::crc::calculate(
+  C crc = MODBUS_READ_READCRC(request.Buffer, variable.Length.RequestBuffer);
+  //C crc = ::gos::atl::utility::crc::read<C, L>(request, variable.Length.RequestBuffer);
+  return ::gos::atl::utility::crc::calculate<C, I, S>(
     request,
     variable.Length.RequestBuffer - MODBUS_CRC_LENGTH) == crc;
 }
 }
 
 namespace create {
-template<typename A, typename I, typename L, typename M, typename R, typename S, typename T>
+template<
+  typename A = uint8_t,
+  typename F = unit16_t,
+  typename I = uint16_t,
+  typename L = uint16_t,
+  typename M = uint16_t,
+  typename R = uint8_t,
+  typename S = uint16_t,
+  typename T = uint64_t >
 R response(
+  ::gos::atl::modbus::Handler<A, F, L, R>& handler,
   ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-  ::gos::atl::buffer::Holder<S, char>& response,
-  ::gos::atl::buffer::Holder<S, char>& request) {
+  ::gos::atl::buffer::Holder<S, char>& request,
+  ::gos::atl::buffer::Holder<S, char>& response) {
   A first;
   L length;
   I index;
@@ -721,13 +874,19 @@ R response(
     variable.Length.ResponseBuffer += 1;
 
     // execute callback and return the status code
+#ifdef GOS_DEPRECATED
     return callback::execute<A, I, L, R>(CB_READ_EXCEPTION_STATUS, 0, 8);
+#else
+    return handler.ReadExceptionStatus(CB_READ_EXCEPTION_STATUS);
+#endif
   case FC_READ_COILS:          // read coils (digital out state)
   case FC_READ_DISCRETE_INPUT: // read input state (digital in)
     // read the the first input address and the number of inputs
-    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
+    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
 
-    length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2);
+    length = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2);
+    /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
 
     // calculate response data length and add to output buffer length
     request.Buffer[MODBUS_DATA_INDEX] = (length / 8) + (length % 8 != 0);
@@ -735,43 +894,74 @@ R response(
     variable.Length.ResponseBuffer += 1 + request.Buffer[MODBUS_DATA_INDEX];
 
     // execute callback and return the status code
+#ifdef GOS_DEPRECATED
     index = request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
       FC_READ_COILS ? CB_READ_COILS : CB_READ_DISCRETE_INPUTS;
     return callback::execute<A, I, L, R>(index, first, length);
+#else
+    if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
+      FC_READ_COILS) {
+      index = CB_READ_COILS;
+      return handler.ReadCoils(index, first, length);
+    } else {
+      index = MODBUS_CB_READ_DISCRETE_INPUTS;
+      return handler.ReadCoils(index, first, length);
+    }
+#endif
   case FC_READ_HOLDING_REGISTERS: // read holding registers (analog out state)
   case FC_READ_INPUT_REGISTERS:   // read input registers (analog in)
       // read the starting address and the number of inputs
-    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
-    length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2);
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
+    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
+    length = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2);
+    /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
 
-    response.Buffer[MODBUS_DATA_INDEX] = 2 * addressesLength;
+    response.Buffer[MODBUS_DATA_INDEX] = 2 * length;
 
     // calculate response data length and add to output buffer length
     variable.Length.ResponseBuffer += 1 + response.Buffer[MODBUS_DATA_INDEX];
 
     // execute callback and return the status code
+#ifdef GOS_DEPRECATED
     index = request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
       FC_READ_HOLDING_REGISTERS ?
       CB_READ_HOLDING_REGISTERS :
       CB_READ_INPUT_REGISTERS;
     return callback::execute<A, I, L, R>(index, first, length);
+#else
+    if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
+      FC_READ_HOLDING_REGISTERS) {
+      index = CB_READ_HOLDING_REGISTERS;
+      return handler.ReadHoldingRegisters(index, first, length);
+    } else {
+      index = CB_READ_INPUT_REGISTERS;
+      return handler.ReadInputRegisters(index, first, length);
+    }
+#endif
   case FC_WRITE_COIL: // write one coil (digital out)
       // read the address
-    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
+
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
+    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
 
     // add response data length to output buffer length
     variable.Length.ResponseBuffer += 4;
     // copy parts of the request data that need to be in the response data
     ::memcpy(
-      response.Buffer + MODBUS_DATA_INDEX,
-      request.Buffer + MODBUS_DATA_INDEX,
-      _responseBufferLength - MODBUS_FRAME_SIZE);
+      (void*)(response.Buffer + MODBUS_DATA_INDEX),
+      (const void*)(request.Buffer + MODBUS_DATA_INDEX),
+      variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
+#ifdef GOS_DEPRECATED
     return callback::execute<A, I, L, R>(CB_WRITE_COILS, first, 1);
+#else
+    return handler.WriteCoils(CB_WRITE_COILS, first, 1);
+#endif
   case FC_WRITE_REGISTER:
     // read the address
-    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
+    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
 
     // add response data length to output buffer length
     variable.Length.ResponseBuffer += 4;
@@ -782,11 +972,17 @@ R response(
       variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
+#ifdef GOS_DEPRECATED
     return callback::execute<A, I, L, R>(CB_WRITE_HOLDING_REGISTERS, first, 1);
+#else
+    return handler.WriteHoldingRegisters(CB_WRITE_HOLDING_REGISTERS, first, 1);
+#endif
   case FC_WRITE_MULTIPLE_COILS: // write coils (digital out)
       // read the starting address and the number of outputs
-    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
-    length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2);
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
+    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
+    length = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2);
+    /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
 
     // add response data length to output buffer length
     variable.Length.ResponseBuffer += 4;
@@ -797,11 +993,17 @@ R response(
       variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
+#ifdef GOS_DEPRECATED
     return callback::execute<A, I, L, R>(CB_WRITE_COILS, first, length);
+#else
+    return handler.WriteCoils(CB_WRITE_COILS, first, length);
+#endif
   case FC_WRITE_MULTIPLE_REGISTERS: // write holding registers (analog out)
       // read the starting address and the number of outputs
-    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
-    length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2);
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
+    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
+    length = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2);
+    /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
 
     // add response data length to output buffer length
     variable.Length.ResponseBuffer += 4;
@@ -812,10 +1014,15 @@ R response(
       variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
+#ifdef GOS_DEPRECATED
     return callback::execute<A, I, L, R>(
       CB_WRITE_HOLDING_REGISTERS,
       first,
       length);
+#else
+    return handler.WriteHoldingRegisters(
+      CB_WRITE_HOLDING_REGISTERS, first, length);
+#endif
   default:
     return STATUS_ILLEGAL_FUNCTION;
   }
@@ -831,13 +1038,22 @@ namespace report {
  * @param exceptionCode the status code to report.
  * @return the number of bytes written
  */
-template<typename A, typename C, typename I, typename L, typename M, typename P, typename R, typename S, typename T>
+template<
+  typename A = uint8_t,
+  typename I = uint16_t,
+  typename L = uint16_t,
+  typename M = uint16_t,
+  typename P = int,
+  typename R = uint8_t,
+  typename S = uint16_t,
+  typename T = uint64_t >
 R mexception(
   Stream& stream,
   const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
   ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
+  ::gos::atl::buffer::Holder<S, char>& request,
   ::gos::atl::buffer::Holder<S, char>& response,
-  ::gos::atl::buffer::Holder<S, char>& request, const C& code) {
+  const R& code) {
   // we don't respond to broadcast messages
   if (request.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS)
   {
@@ -852,8 +1068,15 @@ R mexception(
 }
 
 }
-
-template<typename A, typename B, typename I, typename L, typename M, typename P, typename R, typename T>
+template<
+  typename A = uint8_t,
+  typename B = uint64_t,
+  typename I = uint16_t,
+  typename L = uint16_t,
+  typename M = uint16_t,
+  typename P = int,
+  typename R = uint8_t,
+  typename T = uint64_t >
 void begin(
   Stream& stream,
   const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
@@ -878,43 +1101,78 @@ void begin(
   variable.Length.RequestBuffer = L();
 }
 
-template<typename A, typename B, typename I, typename L, typename M, typename P, typename R, typename S, typename T>
-R loop(
-  Stream& stream,
-  const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
-  ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-  ::gos::atl::buffer::Holder<S, char>& response,
-  ::gos::atl::buffer::Holder<S, char>& request) {
-  if (variable.IsResponseBufferWriting) {
-    write::response()
+template<
+  typename A = uint8_t,
+  typename B = uint64_t,
+  typename C = uint16_t,
+  typename F = uint16_t,
+  typename I = uint16_t,
+  typename L = uint16_t,
+  typename M = uint16_t,
+  typename P = int,
+  typename R = uint8_t,
+  typename S = uint16_t,
+  typename T = uint64_t >
+  R loop(
+    Stream& stream,
+    const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
+    ::gos::atl::modbus::Handler<A, F, L, R>& handler,
+    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
+    ::gos::atl::buffer::Holder<S, char>& request,
+    ::gos::atl::buffer::Holder<S, char>& response
+  ) {
+  if (variable.Is.ResponseBufferWriting) {
+    ::gos::atl::modbus::details::write::response<A, C, I, L, M, P, R, S, T>(
+      stream,
+      parameter,
+      variable,
+      response);
   }
 
-  if (!read::request<A, I, L, M, P, S, T>(stream, parameter, variable, request)) {
+  if (!::gos::atl::modbus::details::read::request<A, I, L, M, P, S, T>(
+    stream,
+    parameter,
+    variable,
+    request)) {
     return R();
   }
 
   // prepare output buffer
   ::memset(response.Buffer, 0x00, response.Size);
-  response.Buffer[MODBUS_ADDRESS_INDEX] = request.Buffer[MODBUS_ADDRESS_INDEX];
-  response.Buffer[MODBUS_FUNCTION_CODE_INDEX] = request.Buffer[MODBUS_FUNCTION_CODE_INDEX];
-  variable.ResponseBuffer = MODBUS_FRAME_SIZE;
+  response.Buffer[MODBUS_ADDRESS_INDEX] =
+    request.Buffer[MODBUS_ADDRESS_INDEX];
+  response.Buffer[MODBUS_FUNCTION_CODE_INDEX] =
+    request.Buffer[MODBUS_FUNCTION_CODE_INDEX];
+  variable.Length.ResponseBuffer = MODBUS_FRAME_SIZE;
 
   // validate request
-  if (!validate::request()) {
+  if (!::gos::atl::modbus::details::validate::request<
+    A, C, I, L, M, P, R, S, T>(
+    stream,
+    parameter,
+    variable,
+    request,
+    response)) {
     return R();
   }
 
   // execute request and fill the response
-  R status = create::response();
+  R status = ::gos::atl::modbus::details::create::response<
+    A, F, I, L, M, R, S, T>(
+    handler, variable, request, response);
 
   // check if the callback execution failed
   if (status != STATUS_OK) {
-    return report::mexception();
+    return ::gos::atl::modbus::details::report::mexception<
+      A, I, L, M, P, R, S, T>(
+        stream, parameter, variable, request, response, status);
   }
 
   // writes the response being created
-  return write::response();
+  return ::gos::atl::modbus::details::write::response<
+    A, C, I, L, M, P, R, S, T>(stream, parameter, variable, response);
 }
+
 
 }
 }
