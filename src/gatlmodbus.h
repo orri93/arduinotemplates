@@ -83,6 +83,30 @@ template<typename T> bool assign(
   }
   return re;
 }
+template<typename T> bool assign(
+  ::gos::atl::binding::change::aware::reference<T, uint16_t, uint8_t>& binding,
+  Modbus& modbus,
+  const uint16_t& startaddress,
+  const uint16_t& length,
+  uint8_t& from,
+  uint8_t& to) {
+  T value;
+  uint8_t offset, index;
+  bool result = detail::initialize(binding, startaddress, length, offset, from, to);
+  index = from;
+  while (index < to) {
+    value = modbus.readCoilFromBuffer(offset++);
+    if (value != *(binding.pointers[index])) {
+      *(binding.pointers[index]) = value;
+      ::gos::atl::binding::change::aware::set(binding, true);
+    } else {
+      ::gos::atl::binding::change::aware::set(binding, false);
+    }
+    index++;
+  }
+  return result;
+}
+
 }
 
 namespace discrete {
@@ -128,6 +152,29 @@ template<typename T> bool assign(
   }
   return re;
 }
+template<typename T> bool assign(
+  ::gos::atl::binding::change::aware::reference<T, uint16_t, uint8_t>& binding,
+  Modbus& modbus,
+  const uint16_t& startaddress,
+  const uint16_t& length,
+  uint8_t& from,
+  uint8_t& to) {
+  T value;
+  uint8_t offset, index;
+  bool result = detail::initialize(binding, startaddress, length, offset, from, to);
+  index = from;
+  while (index < to) {
+    value = modbus.readRegisterFromBuffer(offset++);
+    if (value != *(binding.pointers[index])) {
+      *(binding.pointers[index]) = value;
+      ::gos::atl::binding::change::aware::set(binding, true);
+    } else {
+      ::gos::atl::binding::change::aware::set(binding, false);
+    
+      index++;
+  }
+  return result;
+}
 }
 
 namespace two {
@@ -162,13 +209,46 @@ template<typename T> bool assign(
   while (index < to) {
     *(binding.pointers[index]) =
       ::gos::atl::utility::number::part::combine<uint16_t, T>(
-      modbus.readRegisterFromBuffer(offset),
-      modbus.readRegisterFromBuffer(offset + 1)
-      );
+        modbus.readRegisterFromBuffer(offset),
+        modbus.readRegisterFromBuffer(offset + 1)
+        );
     offset += 2;
     index++;
   }
   return re;
+}
+template<typename T> bool assign(
+  ::gos::atl::binding::change::aware::reference<T, uint16_t, uint8_t>& binding,
+  Modbus& modbus,
+  const uint16_t& startaddress,
+  const uint16_t& length,
+  uint8_t& from,
+  uint8_t& to) {
+  uint8_t offset, index;
+  bool result = detail::initialize(
+    binding,
+    startaddress,
+    length,
+    offset,
+    from,
+    to);
+  index = from;
+  T value;
+  while (index < to) {
+    value = ::gos::atl::utility::number::part::combine<uint16_t, T>(
+      modbus.readRegisterFromBuffer(offset),
+      modbus.readRegisterFromBuffer(offset + 1)
+      );
+    if (value != *(binding.pointers[index])) {
+      *(binding.pointers[index]) = value;
+      ::gos::atl::binding::changed::aware::set(binding, index, true);
+    } else {
+      ::gos::atl::binding::changed::aware::set(binding, index, false);
+    }
+    offset += 2;
+    index++;
+  }
+  return result;
 }
 }
 
