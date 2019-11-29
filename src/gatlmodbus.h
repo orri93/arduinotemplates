@@ -7,21 +7,130 @@
 
 #include <gatlbinding.h>
 #include <gatlutility.h>
+#include <gatlbuffer.h>
 
 #ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_MODBUS_TESTING
 #include <cassert>
 #endif
 
+/*
+ * Example
+ *   Binding A from address 0x0000 to 0x0002 each only one register
+ *   Binding B from address 0x0003 to 0x0008 each two register
+ *
+ *   Modbus buffer is of length size and always starts from 0
+ *
+ * Calculation rules
+ *     binding end = binding start + binding count * binding size
+ *     modbus end address = modbus start address + length - 1
+ *   For binding to be included the following must hold
+ *     modbus start address + modbus length >= binding start
+ *     modbus start address <= binding end
+ *   If the modbus start address >= binding start
+ *       mmmm          mmmm      mmmmmm        mmmm
+ *       bbbb   or   bbbb   or   bbbb   or   bbbbbbbb
+ *     the first address to consider is always modbus start address
+ *     the first item in the modbus buffer is always 0
+ *     the first in the binding to consider is
+ *       first item index = (modbus start address - binding start) / binding size
+ *     then to check if address is correct
+ *       (((modbus start address - binding start) % binding size) == 0)
+ *     then the items can be read one by one until either
+ *       reach the end of register in the binding or the number of addresses or over
+ *         buffer index = 0
+ *         index = first item index
+ *         buffer count = length
+ *         if modbus end address > binding end {
+ *           buffer count -= modbus end address - binding end
+ *         }
+ *         while(buffer index < buffer count && index < binding count) {
+ *           access/assign
+ *           buffer index += binding size;
+ *           bind index++;
+ *         }
+ *   else the modbus start address < binding start
+ *     mmmm        mmmmmm      mmmmmmmm
+ *       bbbb   or   bbbb   or   bbbb
+ *     the first in the binding to consider is always 0
+ *     the first item in the modbus buffer to consider is binding start - modbus start address
+ *     the first modbus address to consider is the binding start address
+ *     to check if the address is correct
+ *       if(binding end >  modbus end address) {
+ *         (((binding end - modbus end address) % binding size == 0)
+ *     the items can be read one by one until either
+ *       reach the last modbus address or the last binding index
+ *         binding index = 0
+ *         buffer index = binding start - modbus start address
+ *         address = binding start
+ *         while(buffer index < buffer length && index < binding count) {
+ *           access/assign
+ *           buffer index += binding size;
+ *           bind index++;
+ *         }
+ *
+ *     initialize input is the binding, modbus start address, modbus buffer length
+ *                output is first binding index, first buffer index and buffer count
+ *
+ */
+
 namespace gos {
 namespace atl {
 namespace modbus {
+
+namespace binding {
+enum class result { undefined, included, excluded, failure };
 
 template<typename T, typename S = uint8_t> S size() {
   return sizeof(T) / 2;
 }
 
 namespace detail {
-template<typename T> bool initialize(
+template<typename T>
+result initializenew(
+  const ::gos::atl::binding::reference<T, uint16_t, uint8_t>& reference,
+  const uint16_t& start,       // Start address for the modbus function
+  const uint16_t& length,      // Length of the buffer for the modbus function
+  uint16_t& address,           // The first modbus address that is affected
+  uint16_t& first,             // The first buffer item to consider
+  uint16_t& last,              // The last buffer item to consider
+  uint8_t& index) {            // The first index in the binding to consider
+  if (start > reference.first) {
+    if (((start - reference.first) % reference.size) == 0) {
+      /* Using address to hold the difference temporarily */
+      address = (start + length) > (reference.start + reference.count * reference.size);
+      if (address > 0) {
+        if (address / reference.size < reference.count) {
+          last = length - difference;
+          address = start;
+          first = 0;
+          index = start - reference.first / reference.size;
+          return result::included;
+        } else {
+          return result::excluded;
+        }
+      }
+    } else {
+      return result::failure;
+    }
+  } else {
+    /* Using address to hold the difference temporarily */
+    address = (reference.first + reference.count * reference.size) - (start + length);
+    if (address > 0) {
+      if ((address % binding size) == 0) {
+        address = reference.first;
+        first = reference.first - start;
+        index = 0;
+        last = length;
+        return result::included;
+      } else {
+        return result::failure;
+      }
+    } else {
+      return result::excluded;
+    }
+  }
+}
+template<typename T> int initialize(
   // Binding
   const ::gos::atl::binding::reference<T, uint16_t, uint8_t>& reference,
   const uint16_t& start,        // Start address for the modbus function
@@ -238,7 +347,7 @@ template<typename T> bool assign(
     to);
   index = from;
   T value;
-  while (index < to) {
+  while (index < to && offset < length) {
     value = ::gos::atl::utility::number::part::combine<uint16_t, T>(
       modbus.readRegisterFromBuffer(offset),
       modbus.readRegisterFromBuffer(offset + 1)
@@ -254,9 +363,558 @@ template<typename T> bool assign(
     offset += 2;
     index++;
   }
+  to = index;
   return result;
 }
 } // two namespace
+
+} // binding namespace
+
+namespace structures {
+template<typename P, typename A>
+struct Parameter {
+  typedef A address;
+  typedef P pin;
+  address SlaveId;
+  pin TransmissionControl;
+};
+
+template<typename I>
+struct Index {
+  typedef I index;
+  index ResponseWrite;
+};
+template<typename L>
+struct Length {
+  typedef L length;
+  length TotalSent;
+  length TotalReceived;
+  length TransmissionBuffer;
+  length RequestBuffer;
+  length ResponseBuffer;
+};
+
+template<typename S = bool>
+struct State {
+  typedef S state;
+  state ResponseBufferWriting;
+  state RequestBufferReading;
+};
+
+template<typename M, typename T>
+struct Time {
+  typedef M microsecond;
+  typedef T time;
+  microsecond HalfChar;
+  time LastCommunication;
+};
+
+template<typename I, typename L, typename M, typename T>
+struct Variable {
+  struct Time<M, T> Time;
+  struct Length<L> Length;
+  struct Index<I> Index;
+  struct State<> Is;
+};
+}
+
+namespace details {
+namespace callback {
+template<typename A, typename I, typename L, typename R>
+R execute(const I& index, const A& address, const L& length) {
+  if (cbVector[callbackIndex])
+  {
+    return cbVector[callbackIndex](Modbus::readFunctionCode(), address, length);
+  } else
+  {
+    return STATUS_ILLEGAL_FUNCTION;
+  }
+  return R();
+}
+}
+namespace write {
+/**
+ * Writes the output buffer to serial stream
+ *
+ * @return The number of bytes written
+ */
+template<typename A, typename C, typename I, typename L, typename M, typename P, typename R, typename S, typename T>
+R response(
+  Stream& stream,
+  const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
+  ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
+  ::gos::atl::buffer::Holder<S, char>& response) {
+  /**
+  * Validate
+  */
+  // check if there is a response and this is supposed to be the first write
+  if (variable.Index.ResponseWrite == 0 && variable.Length.ResponseBuffer >= MODBUS_FRAME_SIZE) {
+    // set status as writing
+    variable.Is.ResponseBufferWriting = true;
+  }
+
+  // check if we are not in writing or the address is broadcast
+  if (!variable.Is.ResponseBufferWriting ||
+    response.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS) {
+    // cleanup and ignore
+    variable.Is.ResponseBufferWriting = false;
+    variable.Index.ResponseWrite = 0;
+    variable.Length.ResponseBuffer = 0;
+    return 0;
+  }
+
+  /**
+   * Preparing
+   */
+
+   // if this is supposed to be the first write
+  if (variable.Index.ResponseWrite == 0) {
+    // if we still need to wait
+    if ((micros() - variable.Time.LastCommunication) <=
+      (variable.Time.HalfChar * MODBUS_HALF_SILENCE_MULTIPLIER))
+    {
+      // ignore
+      return 0;
+    }
+
+    // calculate and fill crc
+    C crc = ::gos::atl::utility::crc::calculate(
+      response,
+      variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH);
+    response.Buffer[variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH] =
+      crc & 0xff;
+    response.Buffer[(variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH) + 1] =
+      crc >> 8;
+
+    // enter transmission mode
+    if (parameter.TransmissionControl > MODBUS_CONTROL_PIN_NONE) {
+      digitalWrite(parameter.TransmissionControl, HIGH);
+    }
+  }
+
+  /**
+   * Transmit
+   */
+
+   // send buffer
+  L length = 0;
+  if (variable.Length.TransmissionBuffer > 0) {
+    L length = min(
+      stream.availableForWrite(),
+      variable.Length.ResponseBuffer - variable.Index.ResponseWrite);
+
+    if (length > 0) {
+      length = stream.write(
+        response.Buffer + variable.Index.ResponseWrite,
+        length);
+      variable.Index.ResponseWrite += length;
+      variable.Length.TotalSent += length;
+    }
+
+    if (stream.availableForWrite() < variable.Length.TransmissionBuffer)
+    {
+      // still waiting for write to complete
+      variable.Time.LastCommunication = micros();
+      return length;
+    }
+
+    // if buffer reports as empty; make sure it really is 
+    // (`Serial` removes bytes from buffer before sending them)
+    stream.flush();
+  } else {
+    // compatibility for badly written software serials; aka AltSoftSerial
+    length = variable.Length.ResponseBuffer - variable.Index.ResponseWrite;
+
+    if (length > 0) {
+      length = serial.write(response.Buffer, length);
+      serial.flush();
+    }
+
+    variable.Index.ResponseWrite += length;
+    variable.Length.TotalSent += length;
+  }
+
+  if (variable.Index.ResponseWrite >= variable.Length.ResponseBuffer &&
+    (micros() - variable.Time.LastCommunication) >
+    (variable.Time.HalfChar * MODBUS_HALF_SILENCE_MULTIPLIER)) {
+
+    // end transmission
+    if (parameter.TransmissionControl > MODBUS_CONTROL_PIN_NONE) {
+      digitalWrite(parameter.TransmissionControl, LOW);
+    }
+
+    // cleanup
+    variable.Is.ResponseBufferWriting = false;
+    variable.Index.ResponseWrite = 0;
+    variable.Length.ResponseBuffer = 0;
+  }
+
+  return length;
+}
+}
+
+namespace read {
+template<typename V, typename I, typename S>
+V uint16(::gos::atl::buffer::Holder<S, char>& buffer, const I& index) {
+  return T();
+}
+template<typename A, typename I, typename L, typename M, typename P, typename S, typename T>
+bool request(
+  Stream& stream,
+  const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
+  ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
+  ::gos::atl::buffer::Holder<S, char>& request) {
+  /**
+  * Read one data packet and report when received completely
+  */
+  L lenght = stream.available();
+
+  if (lenght > L()) {
+    // if not yet started reading
+    if (!variable.Is.RequestBufferReading) {
+      // And it already took 1.5T from the last message
+      if ((micros() - variable.Time.LastCommunication) >
+        (variable.Time.HalfChar * MODBUS_HALF_SILENCE_MULTIPLIER)) {
+        // start reading and clear buffer
+        variable.Length.RequestBuffer = L();
+        variable.Is.RequestBufferReading = true;
+      } else {
+        // discard data
+        stream.read();
+      }
+    }
+
+    // if already in reading
+    if (variable.Is.RequestBufferReading) {
+      if (variable.Length.RequestBuffer == MODBUS_MAX_BUFFER) {
+        // buffer is already full; stop reading
+        variable.Is.RequestBufferReading = false;
+      }
+
+      // add new bytes to buffer
+      lenght = min(lenght, MODBUS_MAX_BUFFER - variable.Length.RequestBuffer);
+      lenght = stream.readBytes(
+        request.Buffer + variable.Length.RequestBuffer,
+        MODBUS_MAX_BUFFER - variable.Length.RequestBuffer);
+
+      // if this is the first read, check the address to reject irrelevant requests
+      if (variable.Length.RequestBuffer == 0 &&
+        lenght > MODBUS_ADDRESS_INDEX &&
+        (request.Buffer[MODBUS_ADDRESS_INDEX] != parameter.SlaveId &&
+          request.Buffer[MODBUS_ADDRESS_INDEX] != MODBUS_BROADCAST_ADDRESS)) {
+        // bad address, stop reading
+        variable.Is.RequestBufferReading = false;
+      }
+
+      // move byte pointer forward
+      variable.Length.RequestBuffer += length;
+      variable.Length.TotalReceived += length;
+    }
+
+    // save the time of last received byte(s)
+    variable.Time.LastCommunication = micros();
+
+    // wait for more data
+    return false;
+  } else {
+    // if we are in reading but no data is available for 1.5T; this request is completed
+    if (variable.Is.RequestBufferReading &&
+      ((micros() - variable.Time.LastCommunication) >
+      (variable.Time.HalfChar * MODBUS_HALF_SILENCE_MULTIPLIER))) {
+      // allow for new requests to be processed
+      variable.Is.RequestBufferReading = false;
+    } else {
+      // otherwise, wait
+      return false;
+    }
+  }
+
+  return !_isRequestBufferReading && (_requestBufferLength >= MODBUS_FRAME_SIZE);
+}
+}
+namespace validate {
+template<typename A, typename B, typename C, typename I, typename L, typename M, typename P, typename R, typename S, typename T>
+bool request(
+  ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
+  ::gos::atl::buffer::Holder<S, char>& request) {
+  // minimum buffer size (1 x Address, 1 x Function, n x Data, 2 x CRC)
+  L expectedrequestbuffersize = MODBUS_FRAME_SIZE;
+  // check data validity based on the function code
+  switch (request.Buffer[MODBUS_FUNCTION_CODE_INDEX])
+  {
+  case FC_READ_EXCEPTION_STATUS:
+    // broadcast is not supported
+    if (request.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS)
+    {
+      // ignore
+      return false;
+    }
+    break;
+  case FC_READ_COILS:             // read coils (digital read)
+  case FC_READ_DISCRETE_INPUT:    // read input state (digital read)
+  case FC_READ_HOLDING_REGISTERS: // read holding registers (analog read)
+  case FC_READ_INPUT_REGISTERS:   // read input registers (analog read)
+      // broadcast is not supported
+    if (request.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS)
+    {
+      // ignore
+      return false;
+    }
+    // (2 x Index, 2 x Count)
+    expectedrequestbuffersize += 4;
+    break;
+  case FC_WRITE_COIL:     // write coils (digital write)
+  case FC_WRITE_REGISTER: // write regosters (digital write)
+      // (2 x Index, 2 x Count)
+    expectedrequestbuffersize += 4;
+    break;
+  case FC_WRITE_MULTIPLE_COILS:
+  case FC_WRITE_MULTIPLE_REGISTERS:
+    // (2 x Index, 2 x Count, 1 x Bytes)
+    expectedrequestbuffersize += 5;
+    if (variable.Length.RequestBuffer >= expectedrequestbuffersize)
+    {
+      // (n x Bytes)
+      expectedrequestbuffersize += request.Buffer[6];
+    }
+    break;
+  default:
+    // unknown command
+    report::mexception<R>(STATUS_ILLEGAL_FUNCTION);
+    return false;
+  }
+
+  if (variable.Length.RequestBuffer < expectedrequestbuffersize)
+  {
+    // data is smaller than expected, ignore
+    return false;
+  }
+
+  // set correct data size
+  variable.Length.RequestBuffer = expectedrequestbuffersize;
+
+  // check crc
+  C crc = ::gos::atl::utility::crc::read(request, variable.Length.RequestBuffer);
+  return ::gos::atl::utility::crc::calculate(
+    request,
+    variable.Length.RequestBuffer - MODBUS_CRC_LENGTH) == crc;
+}
+}
+
+namespace create {
+template<typename A, typename I, typename L, typename M, typename R, typename S, typename T>
+R response(
+  ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
+  ::gos::atl::buffer::Holder<S, char>& response,
+  ::gos::atl::buffer::Holder<S, char>& request) {
+  A first;
+  L length;
+  I index;
+
+  /**
+  * Match the function code with a callback and execute it
+  * as well as preparing the response buffer
+  */
+  switch (response.Buffer[MODBUS_FUNCTION_CODE_INDEX]) {
+  case FC_READ_EXCEPTION_STATUS:
+    // add response data length to output buffer length
+    variable.Length.ResponseBuffer += 1;
+
+    // execute callback and return the status code
+    return callback::execute<A, I, L, R>(CB_READ_EXCEPTION_STATUS, 0, 8);
+  case FC_READ_COILS:          // read coils (digital out state)
+  case FC_READ_DISCRETE_INPUT: // read input state (digital in)
+    // read the the first input address and the number of inputs
+    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
+
+    length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2);
+
+    // calculate response data length and add to output buffer length
+    request.Buffer[MODBUS_DATA_INDEX] = (length / 8) + (length % 8 != 0);
+    request.Buffer[MODBUS_DATA_INDEX] = (length / 8) + (length % 8 != 0);
+    variable.Length.ResponseBuffer += 1 + request.Buffer[MODBUS_DATA_INDEX];
+
+    // execute callback and return the status code
+    index = request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
+      FC_READ_COILS ? CB_READ_COILS : CB_READ_DISCRETE_INPUTS;
+    return callback::execute<A, I, L, R>(index, first, length);
+  case FC_READ_HOLDING_REGISTERS: // read holding registers (analog out state)
+  case FC_READ_INPUT_REGISTERS:   // read input registers (analog in)
+      // read the starting address and the number of inputs
+    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
+    length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2);
+
+    response.Buffer[MODBUS_DATA_INDEX] = 2 * addressesLength;
+
+    // calculate response data length and add to output buffer length
+    variable.Length.ResponseBuffer += 1 + response.Buffer[MODBUS_DATA_INDEX];
+
+    // execute callback and return the status code
+    index = request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
+      FC_READ_HOLDING_REGISTERS ?
+      CB_READ_HOLDING_REGISTERS :
+      CB_READ_INPUT_REGISTERS;
+    return callback::execute<A, I, L, R>(index, first, length);
+  case FC_WRITE_COIL: // write one coil (digital out)
+      // read the address
+    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
+
+    // add response data length to output buffer length
+    variable.Length.ResponseBuffer += 4;
+    // copy parts of the request data that need to be in the response data
+    ::memcpy(
+      response.Buffer + MODBUS_DATA_INDEX,
+      request.Buffer + MODBUS_DATA_INDEX,
+      _responseBufferLength - MODBUS_FRAME_SIZE);
+
+    // execute callback and return the status code
+    return callback::execute<A, I, L, R>(CB_WRITE_COILS, first, 1);
+  case FC_WRITE_REGISTER:
+    // read the address
+    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
+
+    // add response data length to output buffer length
+    variable.Length.ResponseBuffer += 4;
+    // copy parts of the request data that need to be in the response data
+    ::memcpy(
+      response.Buffer + MODBUS_DATA_INDEX,
+      request.Buffer + MODBUS_DATA_INDEX,
+      variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
+
+    // execute callback and return the status code
+    return callback::execute<A, I, L, R>(CB_WRITE_HOLDING_REGISTERS, first, 1);
+  case FC_WRITE_MULTIPLE_COILS: // write coils (digital out)
+      // read the starting address and the number of outputs
+    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
+    length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2);
+
+    // add response data length to output buffer length
+    variable.Length.ResponseBuffer += 4;
+    // copy parts of the request data that need to be in the response data
+    ::memcpy(
+      response.Buffer + MODBUS_DATA_INDEX,
+      request.Buffer + MODBUS_DATA_INDEX,
+      variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
+
+    // execute callback and return the status code
+    return callback::execute<A, I, L, R>(CB_WRITE_COILS, first, length);
+  case FC_WRITE_MULTIPLE_REGISTERS: // write holding registers (analog out)
+      // read the starting address and the number of outputs
+    first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX);
+    length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2);
+
+    // add response data length to output buffer length
+    variable.Length.ResponseBuffer += 4;
+    // copy parts of the request data that need to be in the response data
+    ::memcpy(
+      response.Buffer + MODBUS_DATA_INDEX,
+      request.Buffer + MODBUS_DATA_INDEX,
+      variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
+
+    // execute callback and return the status code
+    return callback::execute<A, I, L, R>(
+      CB_WRITE_HOLDING_REGISTERS,
+      first,
+      length);
+  default:
+    return STATUS_ILLEGAL_FUNCTION;
+  }
+
+}
+}
+
+namespace report {
+/**
+ * Fills the output buffer with an exception in regard to the request already
+ * in the input buffer and writes the response. No need to do it later.
+ *
+ * @param exceptionCode the status code to report.
+ * @return the number of bytes written
+ */
+template<typename A, typename C, typename I, typename L, typename M, typename P, typename R, typename S, typename T>
+R mexception(
+  Stream& stream,
+  const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
+  ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
+  ::gos::atl::buffer::Holder<S, char>& response,
+  ::gos::atl::buffer::Holder<S, char>& request, const C& code) {
+  // we don't respond to broadcast messages
+  if (request.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS)
+  {
+    return 0;
+  }
+  variable.Length.ResponseBuffer = MODBUS_FRAME_SIZE + 1;
+  response.Buffer[MODBUS_FUNCTION_CODE_INDEX] |= 0x80;
+  response.Buffer[MODBUS_DATA_INDEX] = code;
+
+  return write::response(stream, parameter, variable, response);
+}
+}
+
+}
+
+template<typename A, typename B, typename I, typename L, typename M, typename P, typename R, typename T>
+void begin(
+  Stream& stream,
+  const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
+  ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
+  const B& rate) {
+  variable.Index.ResponseWrite = I();
+  variable.Length.TotalSent = L();
+  variable.Length.TotalReceived = L();
+  variable.Length.ResponseBuffer = L();
+  variable.Is.RequestBufferReading = false;
+  variable.Is.ResponseBufferWriting = false;
+  pinMode(parameter.TransmissionControl, OUTPUT);
+  digitalWrite(parameter.TransmissionControl, LOW);
+  // disable serial stream timeout and cleans the buffer
+  stream.setTimeout(0);
+  stream.flush();
+  variable.Length.TransmissionBuffer = stream.availableForWrite();
+  // calculate half char time time from the serial's baudrate
+  variable.Time.HalfChar = rate > 19200 ? 250 : 5000000 / rate; // 0.5T
+  variable.Time.LastCommunication = micros() +
+    (variable.Time.HalfChar * MODBUS_FULL_SILENCE_MULTIPLIER);
+  variable.Length.RequestBuffer = L();
+}
+
+template<typename A, typename B, typename I, typename L, typename M, typename P, typename R, typename S, typename T>
+R loop(
+  Stream& stream,
+  const ::gos::atl::modbus::structures::Parameter<P, A> parameter,
+  ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
+  ::gos::atl::buffer::Holder<S, char>& response,
+  ::gos::atl::buffer::Holder<S, char>& request) {
+  if (variable.IsResponseBufferWriting) {
+    write::response()
+  }
+
+  if (!read::request<A, I, L, M, P, S, T>(stream, parameter, variable, request)) {
+    return R();
+  }
+
+  // prepare output buffer
+  ::memset(response.Buffer, 0x00, response.Size);
+  response.Buffer[MODBUS_ADDRESS_INDEX] = request.Buffer[MODBUS_ADDRESS_INDEX];
+  response.Buffer[MODBUS_FUNCTION_CODE_INDEX] = request.Buffer[MODBUS_FUNCTION_CODE_INDEX];
+  variable.ResponseBuffer = MODBUS_FRAME_SIZE;
+
+  // validate request
+  if (!validate::request()) {
+    return R();
+  }
+
+  // execute request and fill the response
+  R status = create::response();
+
+  // check if the callback execution failed
+  if (status != STATUS_OK) {
+    return report::mexception();
+  }
+
+  // writes the response being created
+  return write::response();
+}
 
 }
 }

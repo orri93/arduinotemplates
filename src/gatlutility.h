@@ -4,6 +4,7 @@
 #include <Arduino.h>
 
 #include <gatltype.h>
+#include <gatlbuffer.h>
 
 #ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_UTILITY_VECTOR_SUPPORT
 #include <vector>
@@ -12,6 +13,37 @@
 namespace gos {
 namespace atl {
 namespace utility {
+
+namespace crc {
+template<typename C, typename S>
+C read(::gos::atl::buffer::Holder<S, char>& buffer, const S& length) {
+  return R();
+}
+template<typename C, typename I, typename S>
+C calculate(::gos::atl::buffer::Holder<S, char>& buffer, const S& length) {
+  I i, j;
+  C crc = 0xFFFF;
+  C tmp;
+
+  // calculate crc
+  for (i = 0; i < length; i++)
+  {
+    crc = crc ^ buffer.Buffer[i];
+
+    for (j = 0; j < 8; j++)
+    {
+      tmp = crc & 0x0001;
+      crc = crc >> 1;
+      if (tmp)
+      {
+        crc = crc ^ 0xA001;
+      }
+    }
+  }
+
+  return crc;
+}
+}
 
 namespace changed {
 namespace apply {

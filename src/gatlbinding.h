@@ -48,6 +48,43 @@ void clean(reference<T, A, I>& reference) {
 }
 #endif
 
+namespace barray {
+template<typename T, typename A = uint16_t, typename I = uint8_t>
+struct reference {
+  T* pointers;      // The array
+  A first;           // First address for the binding
+  I count;           // Number of references
+  I size;            // Size of each references in either byte or registry count
+};
+
+template<typename T, typename A = uint16_t, typename I = uint8_t>
+A create(
+  reference<T, A, I>& reference,
+  const A& address,
+  const I& count,
+  const I& size) {
+  reference.count = count;
+  reference.first = address;
+  reference.size = size;
+  reference.pointers = (T*)(malloc(sizeof(T) * count));
+  return address + size * count;
+}
+
+template<typename T, typename A = uint16_t, typename I = uint8_t>
+T get(reference<T, A, I>& reference, const I& index) {
+  return reference.pointers[index];
+}
+#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_BINDING_TESTING
+namespace testing {
+template<typename T, typename A = uint16_t, typename I = uint8_t>
+void clean(reference<T, A, I>& reference) {
+  free(reference.pointers);
+  reference.pointers = nullptr;
+}
+}
+#endif
+}
+
 namespace change {
 namespace aware {
 template<typename T, typename A = uint16_t, typename I = uint8_t>
