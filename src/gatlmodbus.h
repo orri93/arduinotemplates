@@ -53,7 +53,7 @@ template<typename T> bool initialize(
   }
   return from < to;
 }
-}
+} // detail namespace
 
 namespace coil {
 template<typename T> bool access(
@@ -98,16 +98,18 @@ template<typename T> bool assign(
     value = modbus.readCoilFromBuffer(offset++);
     if (value != *(binding.pointers[index])) {
       *(binding.pointers[index]) = value;
-      ::gos::atl::binding::change::aware::set(binding, true);
+      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
+        binding, index, true);
     } else {
-      ::gos::atl::binding::change::aware::set(binding, false);
+      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
+        binding, index, false);
     }
     index++;
   }
   return result;
 }
 
-}
+} // coil namespace
 
 namespace discrete {
 template<typename T> bool access(
@@ -122,7 +124,7 @@ template<typename T> bool access(
   }
   return re;
 }
-}
+} // descrete namespace
 
 namespace registers {
 template<typename T> bool access(
@@ -167,15 +169,17 @@ template<typename T> bool assign(
     value = modbus.readRegisterFromBuffer(offset++);
     if (value != *(binding.pointers[index])) {
       *(binding.pointers[index]) = value;
-      ::gos::atl::binding::change::aware::set(binding, true);
+      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
+        binding, index, true);
     } else {
-      ::gos::atl::binding::change::aware::set(binding, false);
-    
-      index++;
+      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
+        binding, index, false);
+    }
+    index++;
   }
   return result;
 }
-}
+} // registers namespace
 
 namespace two {
 template<typename T> bool access(
@@ -241,16 +245,18 @@ template<typename T> bool assign(
       );
     if (value != *(binding.pointers[index])) {
       *(binding.pointers[index]) = value;
-      ::gos::atl::binding::changed::aware::set(binding, index, true);
+      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
+        binding, index, true);
     } else {
-      ::gos::atl::binding::changed::aware::set(binding, index, false);
+      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
+        binding, index, false);
     }
     offset += 2;
     index++;
   }
   return result;
 }
-}
+} // two namespace
 
 }
 }
