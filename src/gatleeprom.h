@@ -133,6 +133,50 @@ template<typename T> void read(
   read(binding.size, binding.first + index, binding.pointers[index]);
 }
 
+
+
+template<typename T, typename A, typename C> void write(
+  ::gos::atl::binding::barray::reference<T, A, C>& binding) {
+  int index = binding.first;
+  for (uint8_t i = 0; i < binding.count; i++) {
+    index = write(binding.size, index, binding.pointers + i);
+  }
+}
+
+template<typename T, typename A, typename C> void update(
+  ::gos::atl::binding::barray::reference<T, A, C>& binding) {
+  int index = binding.first;
+  for (uint8_t i = 0; i < binding.count; i++) {
+    index = update(binding.size, index, binding.pointers + i);
+  }
+}
+
+template<typename T, typename A, typename C> void read(
+  ::gos::atl::binding::barray::reference<T, A, C>& binding) {
+  int index = binding.first;
+  for (uint8_t i = 0; i < binding.count; i++) {
+    index = read(binding.size, index, binding.pointers + i);
+  }
+}
+
+template<typename T, typename A, typename C> void write(
+  ::gos::atl::binding::barray::reference<T, A, C>& binding,
+  const A& index) {
+  write(binding.size, binding.first + index, binding.pointers + index);
+}
+
+template<typename T, typename A, typename C> void update(
+  ::gos::atl::binding::barray::reference<T, A, C>& binding,
+  const int& index) {
+  update(binding.size, binding.first + index, binding.pointers + index);
+}
+
+template<typename T, typename A, typename C > void read(
+  ::gos::atl::binding::barray::reference<T, A, C>& binding,
+  const int& index) {
+  read(binding.size, binding.first + index, binding.pointers + index);
+}
+
 }
 }
 }

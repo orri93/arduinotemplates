@@ -149,7 +149,7 @@ void tunings(
   const P& ki,
   const P& kd) {
   variable.KiTimesTime = static_cast<V>(ki * (P(60) * parameter.Time));
-  variable.KdDividedByTime = static_cast<V>(kd / (P(60) * parameter.TimeMs));
+  variable.KdDividedByTime = static_cast<V>(kd / (P(60) * parameter.Time));
 }
 template<typename V, typename I = V, typename O = V, typename P = V>
 void tunings(
