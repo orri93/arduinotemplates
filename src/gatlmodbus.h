@@ -203,6 +203,53 @@ result initializenew(
     }
   }
 }
+template<typename T>
+result initializenew(
+  const ::gos::atl::binding::barray::reference<T, uint16_t, uint8_t>& reference,
+  const uint16_t& start,       // Start address for the modbus function
+  const uint16_t& length,      // Length of the buffer for the modbus function
+  uint16_t& address,           // The first modbus address that is affected
+  uint16_t& first,             // The first buffer item to consider
+  uint16_t& last,              // The last buffer item to consider
+  uint8_t& index) {            // The first index in the binding to consider
+  if (start > reference.first) {
+    if (((start - reference.first) % reference.size) == 0) {
+      /* Using address to hold the difference temporarily */
+      address = (start + length) -
+        (reference.first + reference.count * reference.size);
+      if (address > 0) {
+        if ((address / reference.size) < reference.count) {
+          last = length - address;
+          address = start;
+          first = 0;
+          index = start - reference.first / reference.size;
+          return result::included;
+        } else {
+          return result::excluded;
+        }
+      }
+    } else {
+      return result::failure;
+    }
+  } else {
+    /* Using address to hold the difference temporarily */
+    address = (reference.first + reference.count * reference.size) -
+      (start + length);
+    if (address > 0) {
+      if ((address % reference.size) == 0) {
+        address = reference.first;
+        first = reference.first - start;
+        index = 0;
+        last = length;
+        return result::included;
+      } else {
+        return result::failure;
+      }
+    } else {
+      return result::excluded;
+    }
+  }
+}
 template<typename T> int initialize(
   // Binding
   const ::gos::atl::binding::reference<T, uint16_t, uint8_t>& reference,
@@ -1397,9 +1444,8 @@ template<
   typename M = uint16_t,
   typename R = uint8_t,
   typename S = uint16_t,
-  typename T = uint64_t,
-  typename V = uint16_t>
-  V registers(
+  typename T = uint64_t>
+  uint16_t registers(
     ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
     ::gos::atl::buffer::Holder<S, char>& request,
     const I& offset) {
@@ -1503,14 +1549,13 @@ template<
   typename M = uint16_t,
   typename R = uint8_t,
   typename S = uint16_t,
-  typename T = uint64_t,
-  typename V = uint16_t>
+  typename T = uint64_t>
   R registers(
     ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
     ::gos::atl::buffer::Holder<S, char>& request,
     ::gos::atl::buffer::Holder<S, char>& response,
     const I& offset,
-    const V& value) {
+    const uint64_t& value) {
   // check function code
   if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] !=
     MODBUS_FC_READ_HOLDING_REGISTERS &&
@@ -1706,7 +1751,7 @@ template<
   uint8_t index;
   result = ::gos::atl::modbus::binding::detail::initializenew(
     binding, start, length, address, first, last, index);
-   if (result == ::gos::atl::modbus::binding::result::included) {
+  if (result == ::gos::atl::modbus::binding::result::included) {
     while (first < length && index < binding.count) {
       ::gos::atl::modbus::provide::registers<I, L, M, R, S, T>(
         variable, request, response, first, *(binding.pointers[index]));
@@ -1714,10 +1759,9 @@ template<
       index++;
     }
   }
-   return result;
+  return result;
 }
 
-namespace registers {
 template<
   typename B,
   typename A = uint16_t,
@@ -1947,7 +1991,7 @@ template<
   typename S = uint16_t,
   typename T = uint64_t>
   ::gos::atl::modbus::binding::result assign(
-    ::gos::atl::binding::reference<B, A, C>& binding,
+    ::gos::atl::binding::barray::reference<B, A, C>& binding,
     ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
     ::gos::atl::buffer::Holder<S, char>& request,
     ::gos::atl::buffer::Holder<S, char>& response,
