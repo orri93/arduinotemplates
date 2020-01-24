@@ -3,17 +3,9 @@
 
 #include <Arduino.h>
 
-#if USE_ARDUINO_MODBUS_SLAVE
-#include <ModbusSlave.h>
-#endif
-
 #include <gatlbinding.h>
 #include <gatlutility.h>
 #include <gatlbuffer.h>
-
-#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_MODBUS_TESTING
-#include <cassert>
-#endif
 
 /*
  * Example
@@ -126,6 +118,7 @@ enum {
   MODBUS_STATUS_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
 };
 
+
 #define MODBUS_FRAME_SIZE 4
 #define MODBUS_CRC_LENGTH 2
 
@@ -144,6 +137,17 @@ enum {
 #define MODBUS_READ_READCRC(arr, length) word(arr[(length - MODBUS_CRC_LENGTH) \
   + 1], arr[length - MODBUS_CRC_LENGTH])
 
+#define MODBUS_TYPE_PIN uint8_t
+#define MODBUS_TYPE_TIME unsigned long
+#define MODBUS_TYPE_RATE unsigned long
+#define MODBUS_TYPE_CODE uint8_t
+#define MODBUS_TYPE_RESULT uint8_t
+#define MODBUS_TYPE_FUNCTION uint8_t
+#define MODBUS_TYPE_BIT_INDEX uint8_t
+#define MODBUS_TYPE_BIND_INDEX uint8_t
+#define MODBUS_TYPE_DEFAULT uint16_t
+#define MODBUS_TYPE_BUFFER uint8_t
+
 namespace gos {
 namespace atl {
 namespace modbus {
@@ -156,26 +160,28 @@ template<typename T, typename S = uint8_t> S size() {
 }
 
 namespace detail {
-template<typename T>
-result initializenew(
-  const ::gos::atl::binding::reference<T, uint16_t, uint8_t>& reference,
-  const uint16_t& start,       // Start address for the modbus function
-  const uint16_t& length,      // Length of the buffer for the modbus function
-  uint16_t& address,           // The first modbus address that is affected
-  uint16_t& first,             // The first buffer item to consider
-  uint16_t& last,              // The last buffer item to consider
-  uint8_t& index) {            // The first index in the binding to consider
-  if (start > reference.first) {
-    if (((start - reference.first) % reference.size) == 0) {
+namespace general {
+template<typename T = MODBUS_TYPE_DEFAULT, typename I = MODBUS_TYPE_BIND_INDEX>
+result initialize(
+  const T& reference,   // First binding address
+  const T& size,        // Binding size
+  const T& count,       // Binding count
+  const T& start,       // Start address for the modbus function
+  const T& length,      // Length of the buffer for the modbus function
+  T& address,           // The first modbus address that is affected
+  T& first,             // The first buffer item to consider
+  T& last,              // The last buffer item to consider
+  I& index) {           // The first index in the binding to consider
+  if (start > reference) {
+    if (((start - reference) % size) == 0) {
       /* Using address to hold the difference temporarily */
-      address = (start + length) -
-        (reference.first + reference.count * reference.size);
+      address = (start + length) - (reference + count * size);
       if (address > 0) {
-        if ((address / reference.size) < reference.count) {
+        if ((address / size) < count) {
           last = length - address;
           address = start;
           first = 0;
-          index = start - reference.first / reference.size;
+          index = start - reference / size;
           return result::included;
         } else {
           return result::excluded;
@@ -186,12 +192,11 @@ result initializenew(
     }
   } else {
     /* Using address to hold the difference temporarily */
-    address = (reference.first + reference.count * reference.size) -
-      (start + length);
+    address = (reference + count * size) - (start + length);
     if (address > 0) {
-      if ((address % reference.size) == 0) {
-        address = reference.first;
-        first = reference.first - start;
+      if ((address % size) == 0) {
+        address = reference;
+        first = reference - start;
         index = 0;
         last = length;
         return result::included;
@@ -203,393 +208,130 @@ result initializenew(
     }
   }
 }
-template<typename T>
-result initializenew(
-  const ::gos::atl::binding::barray::reference<T, uint16_t, uint8_t>& reference,
-  const uint16_t& start,       // Start address for the modbus function
-  const uint16_t& length,      // Length of the buffer for the modbus function
-  uint16_t& address,           // The first modbus address that is affected
-  uint16_t& first,             // The first buffer item to consider
-  uint16_t& last,              // The last buffer item to consider
-  uint8_t& index) {            // The first index in the binding to consider
-  if (start > reference.first) {
-    if (((start - reference.first) % reference.size) == 0) {
-      /* Using address to hold the difference temporarily */
-      address = (start + length) -
-        (reference.first + reference.count * reference.size);
-      if (address > 0) {
-        if ((address / reference.size) < reference.count) {
-          last = length - address;
-          address = start;
-          first = 0;
-          index = start - reference.first / reference.size;
-          return result::included;
-        } else {
-          return result::excluded;
-        }
-      }
-    } else {
-      return result::failure;
-    }
-  } else {
-    /* Using address to hold the difference temporarily */
-    address = (reference.first + reference.count * reference.size) -
-      (start + length);
-    if (address > 0) {
-      if ((address % reference.size) == 0) {
-        address = reference.first;
-        first = reference.first - start;
-        index = 0;
-        last = length;
-        return result::included;
-      } else {
-        return result::failure;
-      }
-    } else {
-      return result::excluded;
-    }
-  }
-}
-template<typename T> int initialize(
-  // Binding
-  const ::gos::atl::binding::reference<T, uint16_t, uint8_t>& reference,
-  const uint16_t& start,        // Start address for the modbus function
-  const uint16_t& length,       // Length for the modbus function
-  uint8_t& offset,              // Offset in the modbus buffer
-  uint8_t& from,                // First binding index
-  uint8_t& to) {                // Last binding index + 1 covered
-  from = 1; to = 0;
-  if (reference.first >= start) {
-    if (reference.first < (start + length)) {
-      //    smmmme
-      //    fbbbbbbl
-      //
-      //    smmmme
-      //      fbbbbl
-      from = 0;
-      offset = reference.first - start;
-      to = (start + length - reference.first) / reference.size;
-    }
-  } else if ((reference.first + reference.count * reference.size) > start) {
-    //      smmmme
-    //    fbbbbl
-    offset = 0;
-    from = ((start - reference.first) % reference.size > 0) +
-      (start - reference.first) / reference.size;
-    to = from + ((start - reference.first) % reference.size == 0) +
-      ((reference.first - 1 + (reference.count * reference.size)) - start) /
-      reference.size;
-  }
-  return from < to;
-}
-} // detail namespace
-
-#if USE_ARDUINO_MODBUS_SLAVE
-namespace coil {
-template<typename T> bool access(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length) {
-  uint8_t offset, from, to;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  while (from < to) {
-    modbus.writeCoilToBuffer(offset++, *(binding.pointers[from++]));
-  }
-  return re;
-}
-template<typename T> bool assign(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length,
-  uint8_t& from,
-  uint8_t& to) {
-  uint8_t offset, index;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  index = from;
-  while (index < to) {
-    *(binding.pointers[index++]) = modbus.readCoilFromBuffer(offset++);
-  }
-  return re;
-}
-template<typename T> bool assign(
-  ::gos::atl::binding::change::aware::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length,
-  uint8_t& from,
-  uint8_t& to) {
-  T value;
-  uint8_t offset, index;
-  bool result = detail::initialize(binding, startaddress, length, offset, from, to);
-  index = from;
-  while (index < to) {
-    value = modbus.readCoilFromBuffer(offset++);
-    if (value != *(binding.pointers[index])) {
-      *(binding.pointers[index]) = value;
-      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
-        binding, index, true);
-    } else {
-      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
-        binding, index, false);
-    }
-    index++;
-  }
-  return result;
-}
-
-} // coil namespace
-
-namespace discrete {
-template<typename T> bool access(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length) {
-  uint8_t offset, from, to;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  while (from < to) {
-    modbus.writeDiscreteInputToBuffer(offset++, *(binding.pointers[from++]));
-  }
-  return re;
-}
-} // descrete namespace
-
-namespace registers {
-template<typename T> bool access(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length) {
-  uint8_t offset, from, to;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  while (from < to) {
-    modbus.writeRegisterToBuffer(offset++, *(binding.pointers[from++]));
-  }
-  return re;
-}
-template<typename T> bool assign(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length,
-  uint8_t& from,
-  uint8_t& to) {
-  uint8_t offset, index;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  index = from;
-  while (index < to) {
-    *(binding.pointers[index++]) = modbus.readRegisterFromBuffer(offset++);
-  }
-  return re;
-}
-template<typename T> bool assign(
-  ::gos::atl::binding::change::aware::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length,
-  uint8_t& from,
-  uint8_t& to) {
-  T value;
-  uint8_t offset, index;
-  bool result = detail::initialize(binding, startaddress, length, offset, from, to);
-  index = from;
-  while (index < to) {
-    value = modbus.readRegisterFromBuffer(offset++);
-    if (value != *(binding.pointers[index])) {
-      *(binding.pointers[index]) = value;
-      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
-        binding, index, true);
-    } else {
-      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
-        binding, index, false);
-    }
-    index++;
-  }
-  return result;
-}
-} // registers namespace
-
-namespace two {
-template<typename T> bool access(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length) {
-  uint8_t offset, from, to;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  while (from < to) {
-    modbus.writeRegisterToBuffer(
-      offset++, ::gos::atl::utility::number::part::first<uint16_t, T>(
-        *(binding.pointers[from])));
-    modbus.writeRegisterToBuffer(
-      offset++, ::gos::atl::utility::number::part::second<uint16_t, T>(
-        *(binding.pointers[from])));
-    from++;
-  }
-  return re;
-}
-template<typename T> bool assign(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length,
-  uint8_t& from,
-  uint8_t& to) {
-  uint8_t offset, index;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  index = from;
-  while (index < to) {
-    *(binding.pointers[index]) =
-      ::gos::atl::utility::number::part::combine<uint16_t, T>(
-        modbus.readRegisterFromBuffer(offset),
-        modbus.readRegisterFromBuffer(offset + 1)
-        );
-    offset += 2;
-    index++;
-  }
-  return re;
-}
-template<typename T> bool assign(
-  ::gos::atl::binding::change::aware::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length,
-  uint8_t& from,
-  uint8_t& to) {
-  uint8_t offset, index;
-  bool result = detail::initialize(
-    binding,
-    startaddress,
-    length,
-    offset,
-    from,
-    to);
-  index = from;
-  T value;
-  while (index < to && offset < length) {
-    value = ::gos::atl::utility::number::part::combine<uint16_t, T>(
-      modbus.readRegisterFromBuffer(offset),
-      modbus.readRegisterFromBuffer(offset + 1)
-      );
-    if (value != *(binding.pointers[index])) {
-      *(binding.pointers[index]) = value;
-      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
-        binding, index, true);
-    } else {
-      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
-        binding, index, false);
-    }
-    offset += 2;
-    index++;
-  }
-  to = index;
-  return result;
-}
-} // two namespace
-#endif
-} // binding namespace
+} // general namespace
 
 template<
-  typename A = uint16_t,
-  typename F = uint16_t,
-  typename L = uint16_t,
-  typename R = uint8_t>
-  class Handler {
-  public:
-    typedef A Address;
-    typedef F Function;
-    typedef L Length;
-    typedef R Result;
-    virtual ~Handler() {}
-    virtual Result ReadCoils(
-      const Function& function,
-      const Address& address,
-      const Length& length) {
-      return MODBUS_STATUS_ILLEGAL_FUNCTION;
-    }
-    virtual Result ReadHoldingRegisters(
-      const Function& function,
-      const Address& address,
-      const Length& length) {
-      return MODBUS_STATUS_ILLEGAL_FUNCTION;
-    }
-    virtual Result ReadInputRegisters(
-      const Function& function,
-      const Address& address,
-      const Length& length) {
-      return MODBUS_STATUS_ILLEGAL_FUNCTION;
-    }
-    virtual Result WriteCoils(
-      const Function& function,
-      const Address& address,
-      const Length& length) {
-      return MODBUS_STATUS_ILLEGAL_FUNCTION;
-    }
-    virtual Result WriteHoldingRegisters(
-      const Function& function,
-      const Address& address,
-      const Length& length) {
-      return MODBUS_STATUS_ILLEGAL_FUNCTION;
-    }
-    virtual Result ReadExceptionStatus(const Function& function) {
-      return MODBUS_STATUS_ILLEGAL_FUNCTION;
-    }
+  typename B,
+  typename T = MODBUS_TYPE_DEFAULT,
+  typename I = MODBUS_TYPE_BIND_INDEX>
+result initialize(
+  const ::gos::atl::binding::reference<B, T, I>& reference,
+  const T& start,       // Start address for the modbus function
+  const T& length,      // Length of the buffer for the modbus function
+  T& address,           // The first modbus address that is affected
+  T& first,             // The first buffer item to consider
+  T& last,              // The last buffer item to consider
+  I& index) {           // The first index in the binding to consider
+  return general::initialize<T>(
+    reference.first,
+    reference.size,
+    reference.count,
+    start,
+    length,
+    address,
+    first,
+    last,
+    index);
+}
+template<
+  typename B,
+  typename T = MODBUS_TYPE_DEFAULT,
+  typename I = MODBUS_TYPE_BIND_INDEX>
+result initialize(
+  const ::gos::atl::binding::barray::reference<B, T, I>& reference,
+  const T& start,       // Start address for the modbus function
+  const T& length,      // Length of the buffer for the modbus function
+  T& address,           // The first modbus address that is affected
+  T& first,             // The first buffer item to consider
+  T& last,              // The last buffer item to consider
+  I& index) {           // The first index in the binding to consider
+  return general::initialize<T>(
+    reference.first,
+    reference.size,
+    reference.count,
+    start,
+    length,
+    address,
+    first,
+    last,
+    index);
+}
+
+} // detail namespace
+} // binding namespace
+
+template<typename T = MODBUS_TYPE_DEFAULT> class Handler {
+public:
+  virtual ~Handler() {}
+  virtual MODBUS_TYPE_RESULT ReadCoils(
+    const MODBUS_TYPE_FUNCTION& function,
+    const T& address,
+    const T& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+  virtual MODBUS_TYPE_RESULT ReadHoldingRegisters(
+    const MODBUS_TYPE_FUNCTION& function,
+    const T& address,
+    const T& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+  virtual MODBUS_TYPE_RESULT ReadInputRegisters(
+    const MODBUS_TYPE_FUNCTION& function,
+    const T& address,
+    const T& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+  virtual MODBUS_TYPE_RESULT WriteCoils(
+    const MODBUS_TYPE_FUNCTION& function,
+    const T& address,
+    const T& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+  virtual MODBUS_TYPE_RESULT WriteHoldingRegisters(
+    const MODBUS_TYPE_FUNCTION& function,
+    const T& address,
+    const T& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
+  virtual MODBUS_TYPE_RESULT ReadExceptionStatus(
+    const MODBUS_TYPE_FUNCTION& function) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
 };
 
 namespace structures {
-template<typename A = uint16_t, typename P = int>
-struct Parameter {
-
-  typedef A address;
-  typedef P pin;
-  address SlaveId;
-  pin TransmissionControl;
+template<typename T = MODBUS_TYPE_DEFAULT> struct Parameter {
+  T Id;
+  MODBUS_TYPE_PIN Control;
 };
 
-template<typename I = uint16_t>
-struct Index {
-  typedef I index;
-  index ResponseWrite;
-};
-template<typename L = uint16_t>
-struct Length {
-  typedef L length;
-  length TotalSent;
-  length TotalReceived;
-  length TransmissionBuffer;
-  length RequestBuffer;
-  length ResponseBuffer;
+template<typename T = MODBUS_TYPE_DEFAULT> struct Index {
+  T Write;
 };
 
-template<typename Bit = bool>
-struct State {
-  typedef Bit state;
-  state ResponseBufferWriting;
-  state RequestBufferReading;
+template<typename T = MODBUS_TYPE_DEFAULT> struct Length {
+  typedef bool state;
+  T Sent;
+  T Received;
+  T Transmission;
+  T Request;
+  T Response;
 };
 
-template<typename M = uint16_t, typename T = uint64_t>
-struct Time {
-  typedef M microsecond;
-  typedef T time;
-  microsecond HalfChar;
-  time LastCommunication;
+template<typename T = MODBUS_TYPE_DEFAULT> struct Time {
+  T Half;
+  MODBUS_TYPE_TIME Last;
 };
 
-template<
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename T = uint64_t>
-  struct Variable {
-  struct Time<M, T> Time;
-  struct Length<L> Length;
-  struct Index<I> Index;
-  struct State<> Is;
+template< typename T = MODBUS_TYPE_DEFAULT> struct Variable {
+  struct Time<T> Time;
+  struct Length<T> Length;
+  struct Index<T> Index;
+  bool Writing;
+  bool Reading;
 };
-}
+} // structures namespace
+
 
 namespace details {
 
@@ -599,91 +341,83 @@ namespace write {
  *
  * @return The number of bytes written
  */
-template<
-  typename A = uint16_t,
-  typename C = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename P = int,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  L response(
-    Stream& stream,
-    const ::gos::atl::modbus::structures::Parameter<A, P> parameter,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& response) {
+template<typename T = MODBUS_TYPE_DEFAULT> T response(
+  Stream& stream,
+  const ::gos::atl::modbus::structures::Parameter<T> parameter,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& response) {
   /**
   * Validate
   */
   // check if there is a response and this is supposed to be the first write
-  if (variable.Index.ResponseWrite == 0 && variable.Length.ResponseBuffer >= MODBUS_FRAME_SIZE) {
+  if (variable.Index.Write == 0 &&
+    variable.Length.Response >= MODBUS_FRAME_SIZE) {
     // set status as writing
-    variable.Is.ResponseBufferWriting = true;
+    variable.Writing = true;
   }
 
   // check if we are not in writing or the address is broadcast
-  if (!variable.Is.ResponseBufferWriting ||
+  if (!variable.Writing ||
     response.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS) {
     // cleanup and ignore
-    variable.Is.ResponseBufferWriting = false;
-    variable.Index.ResponseWrite = 0;
-    variable.Length.ResponseBuffer = 0;
+    variable.Writing = false;
+    variable.Index.Write = 0;
+    variable.Length.Response = 0;
     return 0;
   }
 
   /**
-   * Preparing
-   */
+    * Preparing
+    */
 
-   // if this is supposed to be the first write
-  if (variable.Index.ResponseWrite == 0) {
+    // if this is supposed to be the first write
+  if (variable.Index.Write == 0) {
     // if we still need to wait
-    if ((micros() - variable.Time.LastCommunication) <=
-      (variable.Time.HalfChar * MODBUS_HALF_SILENCE_MULTIPLIER))
+    if ((micros() - variable.Time.Last) <= (MODBUS_TYPE_TIME)
+      (variable.Time.Half * MODBUS_HALF_SILENCE_MULTIPLIER))
     {
       // ignore
       return 0;
     }
 
     // calculate and fill crc
-    C crc = ::gos::atl::utility::crc::calculate<C, I, S>(
+    T crc = ::gos::atl::utility::crc::calculate<T, T, T>(
       response,
-      variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH);
-    response.Buffer[variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH] =
+      variable.Length.Response - MODBUS_CRC_LENGTH);
+    response.Buffer[variable.Length.Response - MODBUS_CRC_LENGTH] =
       crc & 0xff;
-    response.Buffer[(variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH) + 1] =
+    response.Buffer[(variable.Length.Response - MODBUS_CRC_LENGTH) + 1] = 
       crc >> 8;
 
     // enter transmission mode
-    if (parameter.TransmissionControl > MODBUS_CONTROL_PIN_NONE) {
-      digitalWrite(parameter.TransmissionControl, HIGH);
+    if (parameter.Control > MODBUS_CONTROL_PIN_NONE) {
+      digitalWrite(parameter.Control, HIGH);
     }
   }
 
   /**
-   * Transmit
-   */
+    * Transmit
+    */
 
-   // send buffer
-  L length = 0;
-  if (variable.Length.TransmissionBuffer > 0) {
-    L length = min(
+    // send buffer
+  T length = 0;
+  if (variable.Length.Transmission > 0) {
+    length = min(
       stream.availableForWrite(),
-      variable.Length.ResponseBuffer - variable.Index.ResponseWrite);
+      variable.Length.Response - variable.Index.Write);
 
     if (length > 0) {
-      length = (L)(stream.write(
-        (uint8_t*)(response.Buffer + variable.Index.ResponseWrite),
+      length = (T)(stream.write(
+        (MODBUS_TYPE_BUFFER*)(response.Buffer + variable.Index.Write),
         static_cast<size_t>(length)));
-      variable.Index.ResponseWrite += length;
-      variable.Length.TotalSent += length;
+      variable.Index.Write += length;
+      variable.Length.Sent += length;
     }
 
-    if (stream.availableForWrite() < variable.Length.TransmissionBuffer)
+    if (stream.availableForWrite() < variable.Length.Transmission)
     {
       // still waiting for write to complete
-      variable.Time.LastCommunication = micros();
+      variable.Time.Last = micros();
       return length;
     }
 
@@ -692,66 +426,58 @@ template<
     stream.flush();
   } else {
     // compatibility for badly written software serials; aka AltSoftSerial
-    length = variable.Length.ResponseBuffer - variable.Index.ResponseWrite;
+    length = variable.Length.Response - variable.Index.Write;
 
     if (length > 0) {
-      length = (L)(stream.write(
-        (const uint8_t*)(response.Buffer),
+      length = (T)(stream.write(
+        (const MODBUS_TYPE_BUFFER*)(response.Buffer),
         static_cast<size_t>(length)));
       stream.flush();
     }
 
-    variable.Index.ResponseWrite += length;
-    variable.Length.TotalSent += length;
+    variable.Index.Write += length;
+    variable.Length.Sent += length;
   }
 
-  if (variable.Index.ResponseWrite >= variable.Length.ResponseBuffer &&
-    (micros() - variable.Time.LastCommunication) >
-    (variable.Time.HalfChar * MODBUS_HALF_SILENCE_MULTIPLIER)) {
+  if (variable.Index.Write >= variable.Length.Response &&
+    (micros() - variable.Time.Last) >
+    (MODBUS_TYPE_TIME)(variable.Time.Half * MODBUS_HALF_SILENCE_MULTIPLIER)) {
 
     // end transmission
-    if (parameter.TransmissionControl > MODBUS_CONTROL_PIN_NONE) {
-      digitalWrite(parameter.TransmissionControl, LOW);
+    if (parameter.Control > MODBUS_CONTROL_PIN_NONE) {
+      digitalWrite(parameter.Control, LOW);
     }
 
     // cleanup
-    variable.Is.ResponseBufferWriting = false;
-    variable.Index.ResponseWrite = 0;
-    variable.Length.ResponseBuffer = 0;
+    variable.Writing = false;
+    variable.Index.Write = 0;
+    variable.Length.Response = 0;
   }
 
   return length;
 }
-}
+} // write namespace
 
 namespace read {
-template<
-  typename A = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename P = int,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  bool request(
-    Stream& stream,
-    const ::gos::atl::modbus::structures::Parameter<A, P> parameter,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request) {
+template<typename T = MODBUS_TYPE_DEFAULT> bool request(
+  Stream& stream,
+  const ::gos::atl::modbus::structures::Parameter<T> parameter,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request) {
   /**
   * Read one data packet and report when received completely
   */
-  L length = (L)(stream.available());
+  T length = (T)(stream.available());
 
-  if (length > L()) {
+  if (length > T()) {
     // if not yet started reading
-    if (!variable.Is.RequestBufferReading) {
+    if (!variable.Reading) {
       // And it already took 1.5T from the last message
-      if ((micros() - variable.Time.LastCommunication) >
-        (variable.Time.HalfChar * MODBUS_HALF_SILENCE_MULTIPLIER)) {
+      if ((micros() - variable.Time.Last) > (MODBUS_TYPE_TIME)
+        (variable.Time.Half * MODBUS_HALF_SILENCE_MULTIPLIER)) {
         // start reading and clear buffer
-        variable.Length.RequestBuffer = L();
-        variable.Is.RequestBufferReading = true;
+        variable.Length.Request = T();
+        variable.Reading = true;
       } else {
         // discard data
         stream.read();
@@ -759,65 +485,57 @@ template<
     }
 
     // if already in reading
-    if (variable.Is.RequestBufferReading) {
-#ifdef MODBUS_MAX_BUFFER
-      if (variable.Length.RequestBuffer == MODBUS_MAX_BUFFER) {
+    if (variable.Reading) {
+      if (variable.Length.Request >= request.Size) {
         // buffer is already full; stop reading
-        variable.Is.RequestBufferReading = false;
+        variable.Reading = false;
       }
       // add new bytes to buffer
-      length = min(length, MODBUS_MAX_BUFFER - variable.Length.RequestBuffer);
-      length = (L)(stream.readBytes(
-        request.Buffer + variable.Length.RequestBuffer,
-        static_cast<size_t>(MODBUS_MAX_BUFFER - variable.Length.RequestBuffer)));
+      length = min(length, request.Size - variable.Length.Request);
+#ifdef FIX_BUG
+      length = (T)(stream.readBytes(
+        request.Buffer + variable.Length.Request,
+        static_cast<size_t>(request.Size - variable.Length.Request)));
 #else
-      if (variable.Length.RequestBuffer >= request.Size) {
-        // buffer is already full; stop reading
-        variable.Is.RequestBufferReading = false;
-      }
-      // add new bytes to buffer
-      length = min(length, request.Size - variable.Length.RequestBuffer);
-      length = (L)(stream.readBytes(
-        request.Buffer + variable.Length.RequestBuffer,
-        static_cast<size_t>(request.Size - variable.Length.RequestBuffer)));
+      length = (T)(stream.readBytes(
+        request.Buffer + variable.Length.Request, length));
 #endif
 
-      // if this is the first read, check the address to reject irrelevant requests
-      if (variable.Length.RequestBuffer == 0 &&
+      // if this is the first read, check the address to reject irrelevant
+      if (variable.Length.Request == 0 &&
         length > MODBUS_ADDRESS_INDEX &&
-        (request.Buffer[MODBUS_ADDRESS_INDEX] != parameter.SlaveId &&
+        (request.Buffer[MODBUS_ADDRESS_INDEX] != parameter.Id &&
           request.Buffer[MODBUS_ADDRESS_INDEX] != MODBUS_BROADCAST_ADDRESS)) {
         // bad address, stop reading
-        variable.Is.RequestBufferReading = false;
+        variable.Reading = false;
       }
 
       // move byte pointer forward
-      variable.Length.RequestBuffer += length;
-      variable.Length.TotalReceived += length;
+      variable.Length.Request += length;
+      variable.Length.Received += length;
     }
 
     // save the time of last received byte(s)
-    variable.Time.LastCommunication = micros();
+    variable.Time.Last = micros();
 
     // wait for more data
     return false;
   } else {
-    // if we are in reading but no data is available for 1.5T; this request is completed
-    if (variable.Is.RequestBufferReading &&
-      ((micros() - variable.Time.LastCommunication) >
-      (variable.Time.HalfChar * MODBUS_HALF_SILENCE_MULTIPLIER))) {
+    // if we are in reading but no data is available for 1.5T
+    if (variable.Reading && ((micros() - variable.Time.Last) >(MODBUS_TYPE_TIME)
+      (variable.Time.Half * MODBUS_HALF_SILENCE_MULTIPLIER))) {
       // allow for new requests to be processed
-      variable.Is.RequestBufferReading = false;
+      variable.Reading = false;
+      return variable.Length.Request >= MODBUS_FRAME_SIZE;
     } else {
       // otherwise, wait
       return false;
     }
   }
 
-  return variable.Is.RequestBufferReading &&
-    (variable.Length.RequestBuffer >= MODBUS_FRAME_SIZE);
+  return variable.Reading && (variable.Length.Request >= MODBUS_FRAME_SIZE);
 }
-}
+} // read namespace
 
 namespace report {
 /**
@@ -827,54 +545,37 @@ namespace report {
  * @param exceptionCode the status code to report.
  * @return the number of bytes written
  */
-template<
-  typename A = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename P = int,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t >
-  R mexception(
-    Stream& stream,
-    const ::gos::atl::modbus::structures::Parameter<A, P> parameter,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const R& code) {
+template<typename T = MODBUS_TYPE_DEFAULT>
+MODBUS_TYPE_RESULT mexception(
+  Stream& stream,
+  const ::gos::atl::modbus::structures::Parameter<T> parameter,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response,
+  const MODBUS_TYPE_CODE& code) {
   // we don't respond to broadcast messages
   if (request.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS)
   {
     return 0;
   }
-  variable.Length.ResponseBuffer = MODBUS_FRAME_SIZE + 1;
+  variable.Length.Response = MODBUS_FRAME_SIZE + 1;
   response.Buffer[MODBUS_FUNCTION_CODE_INDEX] |= 0x80;
   response.Buffer[MODBUS_DATA_INDEX] = code;
 
-  return write::response(stream, parameter, variable, response);
+  return (MODBUS_TYPE_RESULT)write::response<T>(
+    stream, parameter, variable, response);
 }
-}
+} // report namespace
 
 namespace validate {
-template<
-  typename A = uint16_t,
-  typename C = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename P = int,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  bool request(
-    Stream& stream,
-    const ::gos::atl::modbus::structures::Parameter<A, P> parameter,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response) {
+template<typename T = MODBUS_TYPE_DEFAULT> bool request(
+  Stream& stream,
+  const ::gos::atl::modbus::structures::Parameter<T> parameter,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response) {
   // minimum buffer size (1 x Address, 1 x Function, n x Data, 2 x CRC)
-  L expectedrequestbuffersize = MODBUS_FRAME_SIZE;
+  T expectedrequestbuffersize = MODBUS_FRAME_SIZE;
   // check data validity based on the function code
   switch (request.Buffer[MODBUS_FUNCTION_CODE_INDEX]) {
   case MODBUS_FC_READ_EXCEPTION_STATUS:
@@ -905,14 +606,14 @@ template<
   case MODBUS_FC_WRITE_MULTIPLE_REGISTERS:
     // (2 x Index, 2 x Count, 1 x Bytes)
     expectedrequestbuffersize += 5;
-    if (variable.Length.RequestBuffer >= expectedrequestbuffersize) {
+    if (variable.Length.Request >= expectedrequestbuffersize) {
       // (n x Bytes)
       expectedrequestbuffersize += request.Buffer[6];
     }
     break;
   default:
     // unknown command
-    ::gos::atl::modbus::details::report::mexception<A, I, L, M, P, R, S, T>(
+    ::gos::atl::modbus::details::report::mexception<T>(
       stream,
       parameter,
       variable,
@@ -922,41 +623,30 @@ template<
     return false;
   }
 
-  if (variable.Length.RequestBuffer < expectedrequestbuffersize) {
+  if (variable.Length.Request < expectedrequestbuffersize) {
     // data is smaller than expected, ignore
     return false;
   }
 
   // set correct data size
-  variable.Length.RequestBuffer = expectedrequestbuffersize;
+  variable.Length.Request = expectedrequestbuffersize;
 
   // check crc
-  C crc = MODBUS_READ_READCRC(request.Buffer, variable.Length.RequestBuffer);
-  //C crc = ::gos::atl::utility::crc::read<C, L>(request, variable.Length.RequestBuffer);
-  return ::gos::atl::utility::crc::calculate<C, I, S>(
+  T crc = MODBUS_READ_READCRC(request.Buffer, variable.Length.Request);
+  return ::gos::atl::utility::crc::calculate<T, T, T>(
     request,
-    variable.Length.RequestBuffer - MODBUS_CRC_LENGTH) == crc;
+    variable.Length.Request  - MODBUS_CRC_LENGTH) == crc;
 }
-}
+} // validate namespace
 
 namespace create {
-template<
-  typename A = uint16_t,
-  typename F = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t >
-  R response(
-    ::gos::atl::modbus::Handler<A, F, L, R>& handler,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response) {
-  A first;
-  L length;
-  I index;
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
+    ::gos::atl::modbus::Handler<T>& handler,
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, char>& response) {
+  T first, length;
+  MODBUS_TYPE_FUNCTION index;
 
   /**
   * Match the function code with a callback and execute it
@@ -965,34 +655,25 @@ template<
   switch (response.Buffer[MODBUS_FUNCTION_CODE_INDEX]) {
   case MODBUS_FC_READ_EXCEPTION_STATUS:
     // add response data length to output buffer length
-    variable.Length.ResponseBuffer += 1;
+    variable.Length.Response += 1;
 
     // execute callback and return the status code
-#ifdef GOS_DEPRECATED
-    return callback::execute<A, I, L, R>(MODBUS_CB_READ_EXCEPTION_STATUS, 0, 8);
-#else
     return handler.ReadExceptionStatus(MODBUS_CB_READ_EXCEPTION_STATUS);
-#endif
+
   case MODBUS_FC_READ_COILS:          // read coils (digital out state)
   case MODBUS_FC_READ_DISCRETE_INPUT: // read input state (digital in)
     // read the the first input address and the number of inputs
-    first = (A)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
+    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
     /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
 
-    length = (L)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
+    length = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
     /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
 
     // calculate response data length and add to output buffer length
     request.Buffer[MODBUS_DATA_INDEX] = (length / 8) + (length % 8 != 0);
-    request.Buffer[MODBUS_DATA_INDEX] = (length / 8) + (length % 8 != 0);
-    variable.Length.ResponseBuffer += 1 + request.Buffer[MODBUS_DATA_INDEX];
+    variable.Length.Response += 1 + request.Buffer[MODBUS_DATA_INDEX];
 
     // execute callback and return the status code
-#ifdef GOS_DEPRECATED
-    index = request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
-      MODBUS_FC_READ_COILS ? MODBUS_CB_READ_COILS : MODBUS_CB_READ_DISCRETE_INPUTS;
-    return callback::execute<A, I, L, R>(index, first, length);
-#else
     if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
       MODBUS_FC_READ_COILS) {
       index = MODBUS_CB_READ_COILS;
@@ -1001,28 +682,20 @@ template<
       index = MODBUS_CB_READ_DISCRETE_INPUTS;
       return handler.ReadCoils(index, first, length);
     }
-#endif
-  case MODBUS_FC_READ_HOLDING_REGISTERS: // read holding registers (analog out state)
-  case MODBUS_FC_READ_INPUT_REGISTERS:   // read input registers (analog in)
+  case MODBUS_FC_READ_HOLDING_REGISTERS: // read holding registers
+  case MODBUS_FC_READ_INPUT_REGISTERS:   // read input registers
       // read the starting address and the number of inputs
-    first = (A)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
+    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
     /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
-    length = (L)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
+    length = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
     /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
 
     response.Buffer[MODBUS_DATA_INDEX] = 2 * length;
 
     // calculate response data length and add to output buffer length
-    variable.Length.ResponseBuffer += 1 + response.Buffer[MODBUS_DATA_INDEX];
+    variable.Length.Response += 1 + response.Buffer[MODBUS_DATA_INDEX];
 
     // execute callback and return the status code
-#ifdef GOS_DEPRECATED
-    index = request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
-      MODBUS_FC_READ_HOLDING_REGISTERS ?
-      MODBUS_CB_READ_HOLDING_REGISTERS :
-      MODBUS_CB_READ_INPUT_REGISTERS;
-    return callback::execute<A, I, L, R>(index, first, length);
-#else
     if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
       MODBUS_FC_READ_HOLDING_REGISTERS) {
       index = MODBUS_CB_READ_HOLDING_REGISTERS;
@@ -1031,166 +704,128 @@ template<
       index = MODBUS_CB_READ_INPUT_REGISTERS;
       return handler.ReadInputRegisters(index, first, length);
     }
-#endif
   case MODBUS_FC_WRITE_COIL: // write one coil (digital out)
       // read the address
 
-    first = (A)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
+    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
     /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
 
     // add response data length to output buffer length
-    variable.Length.ResponseBuffer += 4;
+    variable.Length.Response += 4;
     // copy parts of the request data that need to be in the response data
     ::memcpy(
       (void*)(response.Buffer + MODBUS_DATA_INDEX),
       (const void*)(request.Buffer + MODBUS_DATA_INDEX),
-      variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
+      variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
-#ifdef GOS_DEPRECATED
-    return callback::execute<A, I, L, R>(CB_WRITE_COILS, first, 1);
-#else
     return handler.WriteCoils(MODBUS_CB_WRITE_COILS, first, 1);
-#endif
   case MODBUS_FC_WRITE_REGISTER:
     // read the address
-    first = (A)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
+    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
     /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
 
     // add response data length to output buffer length
-    variable.Length.ResponseBuffer += 4;
+    variable.Length.Response += 4;
     // copy parts of the request data that need to be in the response data
     ::memcpy(
       response.Buffer + MODBUS_DATA_INDEX,
       request.Buffer + MODBUS_DATA_INDEX,
-      variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
+      variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
-#ifdef GOS_DEPRECATED
-    return callback::execute<A, I, L, R>(CB_WRITE_HOLDING_REGISTERS, first, 1);
-#else
-    return handler.WriteHoldingRegisters(MODBUS_CB_WRITE_HOLDING_REGISTERS, first, 1);
-#endif
+    return handler.WriteHoldingRegisters(
+      MODBUS_CB_WRITE_HOLDING_REGISTERS, first, 1);
   case MODBUS_FC_WRITE_MULTIPLE_COILS: // write coils (digital out)
       // read the starting address and the number of outputs
-    first = (A)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
+    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
     /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
-    length = (L)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
+    length = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
     /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
 
     // add response data length to output buffer length
-    variable.Length.ResponseBuffer += 4;
+    variable.Length.Response += 4;
     // copy parts of the request data that need to be in the response data
     ::memcpy(
       response.Buffer + MODBUS_DATA_INDEX,
       request.Buffer + MODBUS_DATA_INDEX,
-      variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
+      variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
-#ifdef GOS_DEPRECATED
-    return callback::execute<A, I, L, R>(CB_WRITE_COILS, first, length);
-#else
     return handler.WriteCoils(MODBUS_CB_WRITE_COILS, first, length);
-#endif
-  case MODBUS_FC_WRITE_MULTIPLE_REGISTERS: // write holding registers (analog out)
+  case MODBUS_FC_WRITE_MULTIPLE_REGISTERS: // write holding registers
       // read the starting address and the number of outputs
-    first = (A)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
+    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
     /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
-    length = (L)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
+    length = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
     /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
 
     // add response data length to output buffer length
-    variable.Length.ResponseBuffer += 4;
+    variable.Length.Response += 4;
     // copy parts of the request data that need to be in the response data
     ::memcpy(
       response.Buffer + MODBUS_DATA_INDEX,
       request.Buffer + MODBUS_DATA_INDEX,
-      variable.Length.ResponseBuffer - MODBUS_FRAME_SIZE);
+      variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
-#ifdef GOS_DEPRECATED
-    return callback::execute<A, I, L, R>(
-      MODBUS_CB_WRITE_HOLDING_REGISTERS,
-      first,
-      length);
-#else
     return handler.WriteHoldingRegisters(
       MODBUS_CB_WRITE_HOLDING_REGISTERS, first, length);
-#endif
   default:
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
   }
-
 }
-}
+} // create namespace
 
-}
+} // details namespace
 
-template<
-  typename A = uint16_t,
-  typename B = uint64_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename P = int,
-  typename R = uint8_t,
-  typename T = uint64_t >
-  void begin(
-    Stream& stream,
-    const ::gos::atl::modbus::structures::Parameter<A, P> parameter,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    const B& rate) {
-  variable.Index.ResponseWrite = I();
-  variable.Length.TotalSent = L();
-  variable.Length.TotalReceived = L();
-  variable.Length.ResponseBuffer = L();
-  variable.Is.RequestBufferReading = false;
-  variable.Is.ResponseBufferWriting = false;
-  pinMode(parameter.TransmissionControl, OUTPUT);
-  digitalWrite(parameter.TransmissionControl, LOW);
+
+template<typename T = MODBUS_TYPE_DEFAULT> void begin(
+  Stream& stream,
+  const ::gos::atl::modbus::structures::Parameter<T> parameter,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  const MODBUS_TYPE_RATE& rate) {
+  variable.Index.Write = T();
+  variable.Length.Sent = T();
+  variable.Length.Received = T();
+  variable.Length.Response = T();
+  variable.Reading = false;
+  variable.Writing = false;
+  pinMode(parameter.Control, OUTPUT);
+  digitalWrite(parameter.Control, LOW);
   // disable serial stream timeout and cleans the buffer
   stream.setTimeout(0);
   stream.flush();
-  variable.Length.TransmissionBuffer = stream.availableForWrite();
+  variable.Length.Transmission = stream.availableForWrite();
   // calculate half char time time from the serial's baudrate
-  variable.Time.HalfChar = rate > 19200 ? 250 : 5000000 / rate; // 0.5T
-  variable.Time.LastCommunication = micros() +
-    (variable.Time.HalfChar * MODBUS_FULL_SILENCE_MULTIPLIER);
-  variable.Length.RequestBuffer = L();
+  variable.Time.Half = rate > 19200 ? 250 :
+    static_cast<T>(5000000 / rate); // 0.5T
+  variable.Time.Last = micros() +
+    (variable.Time.Half * MODBUS_FULL_SILENCE_MULTIPLIER);
+  variable.Length.Request = T();
 }
 
-template<
-  typename A = uint16_t,
-  typename C = uint16_t,
-  typename F = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename P = int,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  R loop(
+template<typename T = MODBUS_TYPE_DEFAULT> T loop(
     Stream& stream,
-    const ::gos::atl::modbus::structures::Parameter<A, P> parameter,
-    ::gos::atl::modbus::Handler<A, F, L, R>& handler,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response) {
-  if (variable.Is.ResponseBufferWriting) {
-    ::gos::atl::modbus::details::write::response<A, C, I, L, M, P, S, T>(
+    const ::gos::atl::modbus::structures::Parameter<T> parameter,
+    ::gos::atl::modbus::Handler<T>& handler,
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, char>& response) {
+  if (variable.Writing) {
+    ::gos::atl::modbus::details::write::response<T>(
       stream,
       parameter,
       variable,
       response);
   }
 
-  if (!::gos::atl::modbus::details::read::request<A, I, L, M, P, S, T>(
+  if (!::gos::atl::modbus::details::read::request<T>(
     stream,
     parameter,
     variable,
     request)) {
-    return R();
+    return 0;
   }
 
   // prepare output buffer
@@ -1199,59 +834,53 @@ template<
     request.Buffer[MODBUS_ADDRESS_INDEX];
   response.Buffer[MODBUS_FUNCTION_CODE_INDEX] =
     request.Buffer[MODBUS_FUNCTION_CODE_INDEX];
-  variable.Length.ResponseBuffer = MODBUS_FRAME_SIZE;
+  variable.Length.Response = MODBUS_FRAME_SIZE;
 
   // validate request
-  if (!::gos::atl::modbus::details::validate::request<
-    A, C, I, L, M, P, R, S, T>(
+  if (!::gos::atl::modbus::details::validate::request<T>(
       stream,
       parameter,
       variable,
       request,
       response)) {
-    return R();
+    return 0;
   }
 
   // execute request and fill the response
-  R status = ::gos::atl::modbus::details::create::response<
-    A, F, I, L, M, R, S, T>(
+  MODBUS_TYPE_RESULT status = ::gos::atl::modbus::details::create::response<T>(
       handler, variable, request, response);
 
   // check if the callback execution failed
   if (status != MODBUS_STATUS_OK) {
-    return ::gos::atl::modbus::details::report::mexception<
-      A, I, L, M, P, R, S, T>(
-        stream, parameter, variable, request, response, status);
+    return ::gos::atl::modbus::details::report::mexception<T>(
+      stream,
+      parameter,
+      variable,
+      request,
+      response,
+      status);
   }
 
   // writes the response being created
-  return ::gos::atl::modbus::details::write::response<
-    A, C, I, L, M, P, S, T>(stream, parameter, variable, response);
+  return ::gos::atl::modbus::details::write::response<T>(
+    stream, parameter, variable, response);
 }
+
 
 namespace index {
 namespace access {
-template<
-  typename A = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  R coil(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    const I& offset,
-    I& index,
-    I& bitindex) {
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    const T& offset,
+    T& index,
+    MODBUS_TYPE_BIT_INDEX& bitindex) {
   if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] == MODBUS_FC_WRITE_COIL)
   {
     if (offset == 0)
     {
       index = MODBUS_DATA_INDEX + 2;
       // (2 x coilAddress, 1 x value)
-      /* return MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2) == MODBUS_COIL_ON; */
       return MODBUS_FC_WRITE_COIL;
     }
   } else if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
@@ -1260,21 +889,14 @@ template<
     index = MODBUS_DATA_INDEX + 5 + (offset / 8);
     bitindex = offset % 8;
 
-    return index < variable.Length.RequestBuffer - MODBUS_CRC_LENGTH;
+    return index < variable.Length.Request - MODBUS_CRC_LENGTH;
   }
 }
-template<
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  bool registers(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    const I& offset,
-    I& index) {
+template<typename T = MODBUS_TYPE_DEFAULT> bool registers(
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    const T& offset,
+    T& index) {
   if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] == MODBUS_FC_WRITE_REGISTER) {
     if (offset == 0) {
       index = MODBUS_DATA_INDEX + 2;
@@ -1286,7 +908,7 @@ template<
     index = MODBUS_DATA_INDEX + 5 + (offset * 2);
 
     // check offset
-    if (index < variable.Length.RequestBuffer - MODBUS_CRC_LENGTH)
+    if (index < variable.Length.Request - MODBUS_CRC_LENGTH)
     {
       return true;
     }
@@ -1295,21 +917,14 @@ template<
 }
 }
 namespace provide {
-template<
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  R coil(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const I& offset,
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, char>& response,
+    const T& offset,
     //  const bool& state,
-    I& index,
-    I& bitindex) {
+    T& index,
+    MODBUS_TYPE_BIT_INDEX& bitindex) {
   // check function code
   if (
     request.Buffer[MODBUS_FUNCTION_CODE_INDEX] != MODBUS_FC_READ_DISCRETE_INPUT &&
@@ -1322,7 +937,7 @@ template<
   bitindex = offset % 8;
 
   // check offset
-  if (index >= variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH)
+  if (index >= variable.Length.Response - MODBUS_CRC_LENGTH)
   {
     return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
   }
@@ -1330,18 +945,11 @@ template<
   return MODBUS_STATUS_OK;
 }
 
-template<
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  R registers(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    const I& offset,
-    I& index) {
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    const T& offset,
+    T& index) {
   // check function code
   if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] !=
     MODBUS_FC_READ_HOLDING_REGISTERS &&
@@ -1353,27 +961,21 @@ template<
   index = MODBUS_DATA_INDEX + 1 + (offset * 2);
 
   // check offset
-  if ((index + 2) > (variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH))
+  if ((index + 2) > (variable.Length.Response - MODBUS_CRC_LENGTH))
   {
     return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
   }
 
   return MODBUS_STATUS_OK;
 }
-}
-}
+} // access namespace
+} // index namespace
+
 
 namespace access {
-template<
-  typename F = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  F function(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request) {
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_FUNCTION function(
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request) {
   if (variable.Length.RequestBuffer >= MODBUS_FRAME_SIZE &&
     !variable.Is.RequestBufferReading)
   {
@@ -1383,16 +985,9 @@ template<
 }
 
 namespace unit {
-template<
-  typename A = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  A address(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request) {
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_FUNCTION address(
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request) {
   if (variable.Length.RequestBuffer >= MODBUS_FRAME_SIZE &&
     !variable.Is.RequestBufferReading)
   {
@@ -1403,34 +998,21 @@ template<
 }
 
 namespace broadcast {
-template<
-  typename A = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  bool is(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request) {
-  return ::gos::atl::modbus::access::unit::address<A, I, L, M, S>(
-    variable, request) == MODBUS_BROADCAST_ADDRESS;
+template<typename T = MODBUS_TYPE_DEFAULT> bool is(
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request) {
+  return ::gos::atl::modbus::access::unit::address<T>(variable, request) ==
+    MODBUS_BROADCAST_ADDRESS;
 }
 }
 
-template<
-  typename A = uint16_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  bool coil(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request, const I& offset) {
-  I index, bindex;
-  if (::gos::atl::modbus::index::access::coil<A, I, L, M, R, S, T>(
+template<typename T = MODBUS_TYPE_DEFAULT> bool coil(
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  const T& offset) {
+  T index;
+  MODBUS_TYPE_BIT_INDEX bindex;
+  if (::gos::atl::modbus::index::access::coil<T>(
     variable, request, offset, index, bindex) == MODBUS_STATUS_OK) {
     return bitRead(request.Buffer[index], bindex);
   } else {
@@ -1438,19 +1020,12 @@ template<
   }
 }
 
-template<
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  uint16_t registers(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    const I& offset) {
-  I index;
-  if (::gos::atl::modbus::index::access::registers<I, L, M, R, S, T>(
+template<typename T = MODBUS_TYPE_DEFAULT> T registers(
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    const T& offset) {
+  T index;
+  if (::gos::atl::modbus::index::access::registers<T>(
     variable, request, offset, index) == MODBUS_STATUS_OK) {
     return MODBUS_READ_UINT16(request.Buffer, index);
   } else {
@@ -1459,20 +1034,14 @@ template<
 }
 } // access namespace
 
+
 namespace provide {
 
-template<
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  R mexception(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const I& offset,
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT mexception(
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, char>& response,
+    const T& offset,
     const bool& status) {
   // check function code
   if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] !=
@@ -1481,11 +1050,11 @@ template<
   }
 
   // (1 x values)
-  I index = MODBUS_DATA_INDEX;
-  I bitindex = offset % 8;
+  T index = MODBUS_DATA_INDEX;
+  T bitindex = offset % 8;
 
   // check offset
-  if (index >= variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH)
+  if (index >= variable.Length.Response - MODBUS_CRC_LENGTH)
   {
     return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
   }
@@ -1501,21 +1070,15 @@ template<
   return MODBUS_STATUS_OK;
 }
 
-template<
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  R coil(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const I& offset,
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, char>& response,
+    const T& offset,
     const bool& status) {
-  I index, bitindex;
-  R result = ::gos::atl::modbus::index::provide::coil<I, L, M, R, S, T>(
+  T index;
+  MODBUS_TYPE_BIT_INDEX bitindex;
+  MODBUS_TYPE_RESULT result = ::gos::atl::modbus::index::provide::coil<T>(
     variable, request, response, offset, index, bitindex);
   if (result == MODBUS_STATUS_OK) {
     if (status) {
@@ -1527,35 +1090,21 @@ template<
   return result;
 }
 
-template<
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  R discrete(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const I& offset,
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT discrete(
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, char>& response,
+    const T& offset,
     const bool& status) {
-  return coil<I, L, M, R, S, T>(variable, request, response, offset, status);
+  return coil<T>(variable, request, response, offset, status);
 }
 
-template<
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  R registers(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const I& offset,
-    const uint64_t& value) {
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, char>& response,
+    const T& offset,
+    const T& value) {
   // check function code
   if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] !=
     MODBUS_FC_READ_HOLDING_REGISTERS &&
@@ -1565,10 +1114,10 @@ template<
   }
 
   // (1 x valueBytes, n x values)
-  I index = MODBUS_DATA_INDEX + 1 + (offset * 2);
+  T index = MODBUS_DATA_INDEX + 1 + (offset * 2);
 
   // check offset
-  if ((index + 2) > (variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH))
+  if ((index + 2) > (variable.Length.Response - MODBUS_CRC_LENGTH))
   {
     return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
   }
@@ -1579,25 +1128,17 @@ template<
   return MODBUS_STATUS_OK;
 }
 
-template<
-  typename C = char,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  R string(
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const I& offset,
-    const C* string,
-    const L& length) {
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT string(
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& response,
+    const T& offset,
+    const char* string,
+    const T& length) {
   // (1 x valueBytes, n x values)
-  I index = MODBUS_DATA_INDEX + 1 + (offset * 2);
+  T index = MODBUS_DATA_INDEX + 1 + (offset * 2);
 
   // check string length.
-  if ((index + length) > (variable.Length.ResponseBuffer - MODBUS_CRC_LENGTH))
+  if ((index + length) > (variable.Length.Response - MODBUS_CRC_LENGTH))
   {
     return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
   }
@@ -1607,11 +1148,12 @@ template<
   return MODBUS_STATUS_OK;
 }
 
-
 } // provide namespace
 
+
 namespace convert {
-template<typename R> R convert(const ::gos::atl::modbus::binding::result& result) {
+template<typename R = MODBUS_TYPE_RESULT>
+R convert(const ::gos::atl::modbus::binding::result& result) {
   switch (result) {
   case ::gos::atl::modbus::binding::result::included:
     return MODBUS_STATUS_OK;
@@ -1619,35 +1161,28 @@ template<typename R> R convert(const ::gos::atl::modbus::binding::result& result
     return 0;
   }
 }
-}
+} // convert namespace
+
 
 namespace binding {
 namespace coil {
-template<
-  typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  ::gos::atl::modbus::binding::result access(
-    ::gos::atl::binding::reference<B, A, C>& binding,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const uint16_t& start,       // Start address for the modbus function
-    const uint16_t& length) {    // Length of the buffer for the modbus function
+template<typename B, typename T = MODBUS_TYPE_DEFAULT>
+::gos::atl::modbus::binding::result access(
+  ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response,
+  const T& start,       // Start address for the modbus function
+  const T& length) {    // Length of the buffer for the modbus function
   ::gos::atl::modbus::binding::result result;
-  uint16_t address, first, last;
-  uint8_t index;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
+  MODBUS_TYPE_DEFAULT address, first, last;
+  MODBUS_TYPE_BIND_INDEX index;
+  result = ::gos::atl::modbus::binding::detail::initialize<
+    B, T, MODBUS_TYPE_BIND_INDEX>(
     binding, start, length, address, first, last, index);
   if (result == ::gos::atl::modbus::binding::result::included) {
     while (first < length && index < binding.count) {
-      ::gos::atl::modbus::provide::coil<I, L, M, R, S, T>(
+      ::gos::atl::modbus::provide::coil<T>(
         variable, request, response, first, *(binding.pointers[index]));
       first++;
       index++;
@@ -1655,35 +1190,26 @@ template<
   }
   return result;
 }
-template<
-  typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  ::gos::atl::modbus::binding::result assign(
-    ::gos::atl::binding::reference<B, A, C>& binding,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const uint16_t& start,    // Start address for the modbus function
-    const uint16_t& length,   // Length of the buffer for the modbus function
-    uint16_t& address,
-    uint16_t& first,
-    uint16_t& last,
-    uint8_t index) {
+template<typename B, typename T = MODBUS_TYPE_DEFAULT>
+::gos::atl::modbus::binding::result assign(
+  ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response,
+  const T& start,    // Start address for the modbus function
+  const T& length,   // Length of the buffer for the modbus function
+  MODBUS_TYPE_DEFAULT& address,
+  MODBUS_TYPE_DEFAULT& first,
+  MODBUS_TYPE_DEFAULT& last,
+  MODBUS_TYPE_BIND_INDEX index) {
   ::gos::atl::modbus::binding::result result;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
+  result = ::gos::atl::modbus::binding::detail::initialize<
+    B, T, MODBUS_TYPE_BIND_INDEX>(
     binding, start, length, address, first, last, index);
   if (result == ::gos::atl::modbus::binding::result::included) {
     while (first < length && index < binding.count) {
       *(binding.pointers[index]) =
-        ::gos::atl::modbus::access::coil<A, I, L, M, R, S, T>(
-          variable, request, first);
+        ::gos::atl::modbus::access::coil<T>(variable, request, first);
       first++;
       index++;
     }
@@ -1694,31 +1220,23 @@ template<
 } // coil namespace
 
 namespace discrete {
-template<
-  typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  ::gos::atl::modbus::binding::result access(
-    ::gos::atl::binding::reference<B, A, C>& binding,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const uint16_t& start,       // Start address for the modbus function
-    const uint16_t& length) {    // Length of the buffer for the modbus function
+template<typename B, typename T = MODBUS_TYPE_DEFAULT>
+::gos::atl::modbus::binding::result access(
+  ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response,
+  const T& start,       // Start address for the modbus function
+  const T& length) {    // Length of the buffer for the modbus function
   ::gos::atl::modbus::binding::result result;
   uint16_t address, first, last;
-  uint8_t index;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
+  MODBUS_TYPE_BIND_INDEX index;
+  result = ::gos::atl::modbus::binding::detail::initialize<
+    B, T, MODBUS_TYPE_BIND_INDEX>(
     binding, start, length, address, first, last, index);
   if (result == ::gos::atl::modbus::binding::result::included) {
     while (first < length && index < binding.count) {
-      ::gos::atl::modbus::provide::discrete<I, L, M, R, S, T>(
+      ::gos::atl::modbus::provide::discrete<T>(
         variable, request, response, first, *(binding.pointers[index]));
       first++;
       index++;
@@ -1731,29 +1249,23 @@ template<
 namespace registers {
 template<
   typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  ::gos::atl::modbus::binding::result access(
-    ::gos::atl::binding::reference<B, A, C>& binding,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const uint16_t& start,       // Start address for the modbus function
-    const uint16_t& length) {    // Length of the buffer for the modbus function
+  typename T = MODBUS_TYPE_DEFAULT,
+  typename I = MODBUS_TYPE_BIND_INDEX>
+::gos::atl::modbus::binding::result access(
+    ::gos::atl::binding::reference<B, T, I>& binding,
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, char>& response,
+    const T& start,       // Start address for the modbus function
+    const T& length) {    // Length of the buffer for the modbus function
   ::gos::atl::modbus::binding::result result;
-  uint16_t address, first, last;
-  uint8_t index;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
+  T address, first, last;
+  I index;
+  result = ::gos::atl::modbus::binding::detail::initialize<B, T, I>(
     binding, start, length, address, first, last, index);
   if (result == ::gos::atl::modbus::binding::result::included) {
     while (first < length && index < binding.count) {
-      ::gos::atl::modbus::provide::registers<I, L, M, R, S, T>(
+      ::gos::atl::modbus::provide::registers<T>(
         variable, request, response, first, *(binding.pointers[index]));
       first++;
       index++;
@@ -1762,31 +1274,23 @@ template<
   return result;
 }
 
-template<
-  typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  ::gos::atl::modbus::binding::result access(
-    ::gos::atl::binding::barray::reference<B, A, C>& binding,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const uint16_t& start,       // Start address for the modbus function
-    const uint16_t& length) {    // Length of the buffer for the modbus function
+template<typename B, typename T = MODBUS_TYPE_DEFAULT>
+::gos::atl::modbus::binding::result access(
+  ::gos::atl::binding::barray::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response,
+  const T& start,       // Start address for the modbus function
+  const T& length) {    // Length of the buffer for the modbus function
   ::gos::atl::modbus::binding::result result;
-  uint16_t address, first, last;
-  uint8_t index;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
+  MODBUS_TYPE_DEFAULT address, first, last;
+  MODBUS_TYPE_BIND_INDEX index;
+  result = ::gos::atl::modbus::binding::detail::initialize<
+    B, T, MODBUS_TYPE_BIND_INDEX>(
     binding, start, length, address, first, last, index);
   if (result == ::gos::atl::modbus::binding::result::included) {
     while (first < length && index < binding.count) {
-      ::gos::atl::modbus::provide::registers<I, L, M, R, S, T>(
+      ::gos::atl::modbus::provide::registers<T>(
         variable, request, response, first, binding.pointers[index]);
       first++;
       index++;
@@ -1795,223 +1299,173 @@ template<
   return result;
 }
 
-template<
-  typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  ::gos::atl::modbus::binding::result assign(
-    ::gos::atl::binding::reference<B, A, C>& binding,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const uint16_t& start,    // Start address for the modbus function
-    const uint16_t& length,   // Length of the buffer for the modbus function
-    uint16_t& address,
-    uint16_t& first,
-    uint16_t& last,
-    uint8_t index) {
+template<typename B, typename T = MODBUS_TYPE_DEFAULT>
+::gos::atl::modbus::binding::result assign(
+  ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response,
+  const T& start,    // Start address for the modbus function
+  const T& length,   // Length of the buffer for the modbus function
+  MODBUS_TYPE_DEFAULT& address,
+  MODBUS_TYPE_DEFAULT& first,
+  MODBUS_TYPE_DEFAULT& last,
+  MODBUS_TYPE_BIND_INDEX index) {
   ::gos::atl::modbus::binding::result result;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
+  result = ::gos::atl::modbus::binding::detail::initialize<
+    B, T, MODBUS_TYPE_BIND_INDEX>(
+    binding, start, length, address, first, last, index);
+  if (result == ::gos::atl::modbus::binding::result::included) {
+    while (first < length && index < binding.count) {
+      *(binding.pointers[index]) = static_cast<B>(
+        ::gos::atl::modbus::access::registers<T>(variable, request, first));
+      first++;
+      index++;
+    }
+  }
+  return result;
+}
+
+template<typename B, typename T = MODBUS_TYPE_DEFAULT>
+::gos::atl::modbus::binding::result assign(
+  ::gos::atl::binding::barray::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response,
+  const T& start,    // Start address for the modbus function
+  const T& length,   // Length of the buffer for the modbus function
+  MODBUS_TYPE_DEFAULT& address,
+  MODBUS_TYPE_DEFAULT& first,
+  MODBUS_TYPE_DEFAULT& last,
+  MODBUS_TYPE_BIND_INDEX index) {
+  ::gos::atl::modbus::binding::result result;
+  result = ::gos::atl::modbus::binding::detail::initialize<
+    B, T, MODBUS_TYPE_BIND_INDEX>(
+    binding, start, length, address, first, last, index);
+  if (result == ::gos::atl::modbus::binding::result::included) {
+    while (first < length && index < binding.count) {
+      binding.pointers[index] = ::gos::atl::modbus::access::registers<T>(
+          variable, request, first);
+      first++;
+      index++;
+    }
+  }
+  return result;
+}
+
+
+}
+
+namespace two {
+template<typename B, typename T = MODBUS_TYPE_DEFAULT>
+::gos::atl::modbus::binding::result access(
+  ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response,
+  const T& start,       // Start address for the modbus function
+  const T& length) {    // Length of the buffer for the modbus function
+  ::gos::atl::modbus::binding::result result;
+  MODBUS_TYPE_DEFAULT address, first, last;
+  MODBUS_TYPE_BIND_INDEX index;
+  result = ::gos::atl::modbus::binding::detail::initialize<
+    B, T, MODBUS_TYPE_BIND_INDEX>(
+    binding, start, length, address, first, last, index);
+  if (result == ::gos::atl::modbus::binding::result::included) {
+    while (first < length && index < binding.count) {
+      ::gos::atl::modbus::provide::registers<T>(
+        variable, request, response, first++,
+        ::gos::atl::utility::number::part::first<T, B>(
+          *(binding.pointers[index])));
+      ::gos::atl::modbus::provide::registers<T>(
+        variable, request, response, first++,
+        ::gos::atl::utility::number::part::second<T, B>(
+          *(binding.pointers[index])));
+      index++;
+    }
+  }
+  return result;
+}
+
+template<typename B, typename T = MODBUS_TYPE_DEFAULT >
+::gos::atl::modbus::binding::result access(
+  ::gos::atl::binding::barray::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response,
+  const T& start,       // Start address for the modbus function
+  const T& length) {    // Length of the buffer for the modbus function
+  ::gos::atl::modbus::binding::result result;
+  MODBUS_TYPE_DEFAULT address, first, last;
+  MODBUS_TYPE_BIND_INDEX index;
+  result = ::gos::atl::modbus::binding::detail::initialize<
+    B, T, MODBUS_TYPE_BIND_INDEX>(
+    binding, start, length, address, first, last, index);
+  if (result == ::gos::atl::modbus::binding::result::included) {
+    while (first < length && index < binding.count) {
+      ::gos::atl::modbus::provide::registers<T>(
+        variable, request, response, first++,
+        ::gos::atl::utility::number::part::first<T, B>(
+          binding.pointers[index]));
+      ::gos::atl::modbus::provide::registers<T>(
+        variable, request, response, first++,
+        ::gos::atl::utility::number::part::second<T, B>(
+          binding.pointers[index]));
+      index++;
+    }
+  }
+  return result;
+}
+
+template<typename B, typename T = MODBUS_TYPE_DEFAULT> ::gos::atl::modbus::binding::result assign(
+    ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
+    ::gos::atl::modbus::structures::Variable<T>& variable,
+    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, char>& response,
+    const T& start,    // Start address for the modbus function
+    const T& length,   // Length of the buffer for the modbus function
+    MODBUS_TYPE_DEFAULT& address,
+    MODBUS_TYPE_DEFAULT& first,
+    MODBUS_TYPE_DEFAULT& last,
+    MODBUS_TYPE_BIND_INDEX index) {
+  ::gos::atl::modbus::binding::result result;
+  result = ::gos::atl::modbus::binding::detail::initialize<
+    B, T, MODBUS_TYPE_BIND_INDEX>(
     binding, start, length, address, first, last, index);
   if (result == ::gos::atl::modbus::binding::result::included) {
     while (first < length && index < binding.count) {
       *(binding.pointers[index]) =
-        ::gos::atl::modbus::access::registers<A, I, L, M, R, S, T>(
-          variable, request, first);
-      first++;
+        ::gos::atl::utility::number::part::combine<T, B>(
+        ::gos::atl::modbus::access::registers<T>(variable, request, first++),
+        ::gos::atl::modbus::access::registers<T>(variable, request, first++));
       index++;
     }
   }
   return result;
 }
 
-template<
-  typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  ::gos::atl::modbus::binding::result assign(
-    ::gos::atl::binding::barray::reference<B, A, C>& binding,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const uint16_t& start,    // Start address for the modbus function
-    const uint16_t& length,   // Length of the buffer for the modbus function
-    uint16_t& address,
-    uint16_t& first,
-    uint16_t& last,
-    uint8_t index) {
+template<typename B, typename T = MODBUS_TYPE_DEFAULT>
+::gos::atl::modbus::binding::result assign(
+  ::gos::atl::binding::barray::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, char>& response,
+  const T& start,    // Start address for the modbus function
+  const T& length,   // Length of the buffer for the modbus function
+  MODBUS_TYPE_DEFAULT& address,
+  MODBUS_TYPE_DEFAULT& first,
+  MODBUS_TYPE_DEFAULT& last,
+  MODBUS_TYPE_BIND_INDEX index) {
   ::gos::atl::modbus::binding::result result;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
+  result = ::gos::atl::modbus::binding::detail::initialize<
+    B, T, MODBUS_TYPE_BIND_INDEX>(
     binding, start, length, address, first, last, index);
   if (result == ::gos::atl::modbus::binding::result::included) {
     while (first < length && index < binding.count) {
       binding.pointers[index] =
-        ::gos::atl::modbus::access::registers<A, I, L, M, R, S, T>(
-          variable, request, first);
-      first++;
-      index++;
-    }
-  }
-  return result;
-}
-
-
-}
-
-namespace two {
-template<
-  typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t >
-  ::gos::atl::modbus::binding::result access(
-  ::gos::atl::binding::reference<B, A, C>& binding,
-  ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-  ::gos::atl::buffer::Holder<S, char>& request,
-  ::gos::atl::buffer::Holder<S, char>& response,
-  const uint16_t& start,       // Start address for the modbus function
-  const uint16_t& length) {    // Length of the buffer for the modbus function
-  ::gos::atl::modbus::binding::result result;
-  uint16_t address, first, last;
-  uint8_t index;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
-    binding, start, length, address, first, last, index);
-  if (result == ::gos::atl::modbus::binding::result::included) {
-    while (first < length && index < binding.count) {
-      ::gos::atl::modbus::provide::registers<I, L, M, R, S, T>(
-        variable, request, response, first++,
-        ::gos::atl::utility::number::part::first(*(binding.pointers[index])));
-      ::gos::atl::modbus::provide::registers<I, L, M, R, S, T>(
-        variable, request, response, first++,
-        ::gos::atl::utility::number::part::second(*(binding.pointers[index])));
-      index++;
-    }
-  }
-  return result;
-}
-
-template<
-  typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t >
-  ::gos::atl::modbus::binding::result access(
-    ::gos::atl::binding::barray::reference<B, A, C>& binding,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const uint16_t& start,       // Start address for the modbus function
-    const uint16_t& length) {    // Length of the buffer for the modbus function
-  ::gos::atl::modbus::binding::result result;
-  uint16_t address, first, last;
-  uint8_t index;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
-    binding, start, length, address, first, last, index);
-  if (result == ::gos::atl::modbus::binding::result::included) {
-    while (first < length && index < binding.count) {
-      ::gos::atl::modbus::provide::registers<I, L, M, R, S, T>(
-        variable, request, response, first++,
-        ::gos::atl::utility::number::part::first(binding.pointers[index]));
-      ::gos::atl::modbus::provide::registers<I, L, M, R, S, T>(
-        variable, request, response, first++,
-        ::gos::atl::utility::number::part::second(binding.pointers[index]));
-      index++;
-    }
-  }
-  return result;
-}
-
-template<
-  typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  ::gos::atl::modbus::binding::result assign(
-    ::gos::atl::binding::reference<B, A, C>& binding,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const uint16_t& start,    // Start address for the modbus function
-    const uint16_t& length,   // Length of the buffer for the modbus function
-    uint16_t& address,
-    uint16_t& first,
-    uint16_t& last,
-    uint8_t index) {
-  ::gos::atl::modbus::binding::result result;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
-    binding, start, length, address, first, last, index);
-  if (result == ::gos::atl::modbus::binding::result::included) {
-    while (first < length && index < binding.count) {
-      *(binding.pointers[index]) = ::gos::atl::utility::number::part::combine<uint16_t, T>(
-        ::gos::atl::modbus::access::registers<I, L, M, R, S, T>(
-          variable, request, first++),
-        ::gos::atl::modbus::access::registers<I, L, M, R, S, T>(
-          variable, request, first++));
-      index++;
-    }
-  }
-  return result;
-}
-
-template<
-  typename B,
-  typename A = uint16_t,
-  typename C = uint8_t,
-  typename I = uint16_t,
-  typename L = uint16_t,
-  typename M = uint16_t,
-  typename R = uint8_t,
-  typename S = uint16_t,
-  typename T = uint64_t>
-  ::gos::atl::modbus::binding::result assign(
-    ::gos::atl::binding::barray::reference<B, A, C>& binding,
-    ::gos::atl::modbus::structures::Variable<I, L, M, T>& variable,
-    ::gos::atl::buffer::Holder<S, char>& request,
-    ::gos::atl::buffer::Holder<S, char>& response,
-    const uint16_t& start,    // Start address for the modbus function
-    const uint16_t& length,   // Length of the buffer for the modbus function
-    uint16_t& address,
-    uint16_t& first,
-    uint16_t& last,
-    uint8_t index) {
-  ::gos::atl::modbus::binding::result result;
-  result = ::gos::atl::modbus::binding::detail::initializenew(
-    binding, start, length, address, first, last, index);
-  if (result == ::gos::atl::modbus::binding::result::included) {
-    while (first < length && index < binding.count) {
-      binding.pointers[index] =
-      ::gos::atl::utility::number::part::combine<uint16_t, T>(
-        ::gos::atl::modbus::access::registers<I, L, M, R, S, T>(
-          variable, request, first++),
-        ::gos::atl::modbus::access::registers<I, L, M, R, S, T>(
-          variable, request, first++));
+        ::gos::atl::utility::number::part::combine<T, B>(
+          ::gos::atl::modbus::access::registers<T>(variable, request, first++),
+          ::gos::atl::modbus::access::registers<T>(variable, request, first++));
       index++;
     }
   }
@@ -2019,160 +1473,11 @@ template<
 }
 }
 
-#ifdef GOS_TODO_LATER
-namespace discrete {
-template<typename T> bool access(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length) {
-  uint8_t offset, from, to;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  while (from < to) {
-    modbus.writeDiscreteInputToBuffer(offset++, *(binding.pointers[from++]));
-  }
-  return re;
-}
-} // descrete namespace
-
-namespace registers {
-template<typename T> bool access(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length) {
-  uint8_t offset, from, to;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  while (from < to) {
-    modbus.writeRegisterToBuffer(offset++, *(binding.pointers[from++]));
-  }
-  return re;
-}
-template<typename T> bool assign(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length,
-  uint8_t& from,
-  uint8_t& to) {
-  uint8_t offset, index;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  index = from;
-  while (index < to) {
-    *(binding.pointers[index++]) = modbus.readRegisterFromBuffer(offset++);
-  }
-  return re;
-}
-template<typename T> bool assign(
-  ::gos::atl::binding::change::aware::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length,
-  uint8_t& from,
-  uint8_t& to) {
-  T value;
-  uint8_t offset, index;
-  bool result = detail::initialize(binding, startaddress, length, offset, from, to);
-  index = from;
-  while (index < to) {
-    value = modbus.readRegisterFromBuffer(offset++);
-    if (value != *(binding.pointers[index])) {
-      *(binding.pointers[index]) = value;
-      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
-        binding, index, true);
-    } else {
-      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
-        binding, index, false);
-    }
-    index++;
-  }
-  return result;
-}
-} // registers namespace
-
-namespace two {
-template<typename T> bool access(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length) {
-  uint8_t offset, from, to;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  while (from < to) {
-    modbus.writeRegisterToBuffer(
-      offset++, ::gos::atl::utility::number::part::first<uint16_t, T>(
-        *(binding.pointers[from])));
-    modbus.writeRegisterToBuffer(
-      offset++, ::gos::atl::utility::number::part::second<uint16_t, T>(
-        *(binding.pointers[from])));
-    from++;
-  }
-  return re;
-}
-template<typename T> bool assign(
-  ::gos::atl::binding::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length,
-  uint8_t& from,
-  uint8_t& to) {
-  uint8_t offset, index;
-  bool re = detail::initialize(binding, startaddress, length, offset, from, to);
-  index = from;
-  while (index < to) {
-    *(binding.pointers[index]) =
-      ::gos::atl::utility::number::part::combine<uint16_t, T>(
-        modbus.readRegisterFromBuffer(offset),
-        modbus.readRegisterFromBuffer(offset + 1)
-        );
-    offset += 2;
-    index++;
-  }
-  return re;
-}
-template<typename T> bool assign(
-  ::gos::atl::binding::change::aware::reference<T, uint16_t, uint8_t>& binding,
-  Modbus& modbus,
-  const uint16_t& startaddress,
-  const uint16_t& length,
-  uint8_t& from,
-  uint8_t& to) {
-  uint8_t offset, index;
-  bool result = detail::initialize(
-    binding,
-    startaddress,
-    length,
-    offset,
-    from,
-    to);
-  index = from;
-  T value;
-  while (index < to && offset < length) {
-    value = ::gos::atl::utility::number::part::combine<uint16_t, T>(
-      modbus.readRegisterFromBuffer(offset),
-      modbus.readRegisterFromBuffer(offset + 1)
-      );
-    if (value != *(binding.pointers[index])) {
-      *(binding.pointers[index]) = value;
-      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
-        binding, index, true);
-    } else {
-      ::gos::atl::binding::change::aware::set<T, uint16_t, uint8_t>(
-        binding, index, false);
-    }
-    offset += 2;
-    index++;
-  }
-  to = index;
-  return result;
-}
-} // two namespace
-
-#endif
 } // binding namespace
 
-} // modbus namespace
+
+}
 }
 }
 
-#endif /* _GOS_ARDUINO_TEMPLATE_LIBRARY_MODBUS_H_ */
+#endif
