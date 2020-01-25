@@ -6,14 +6,8 @@
 #define GOS_ARDUINO_TYPE_PIN uint8_t
 #define GOS_ARDUINO_TYPE_DEFAULT_LED uint8_t
 #define GOS_ARDUINO_TYPE_DEFAULT_SIN float
+#define GOS_ARDUINO_TYPE_TIME float
 
-#ifndef GOS_ARDUINO_LED_SIN_COUNT_IN_STARTUP
-#define GOS_ARDUINO_LED_SIN_COUNT_IN_STARTUP     3
-#endif
-
-#ifndef GOS_ARDUINO_LED_SIN_DELAY_IN_STARTUP
-#define GOS_ARDUINO_LED_SIN_DELAY_IN_STARTUP   500
-#endif
 
 #ifndef GOS_ARDUINO_LED_SIN_HEARTBEAT_STEPS
 #define GOS_ARDUINO_LED_SIN_HEARTBEAT_STEPS 0.001F
@@ -31,6 +25,24 @@
 namespace gos {
 namespace atl {
 namespace led {
+
+inline void initialize(const GOS_ARDUINO_TYPE_PIN& pin) {
+  pinMode(pin, OUTPUT);
+}
+
+template<typename T = GOS_ARDUINO_TYPE_DEFAULT_LED>
+void blink(
+  const GOS_ARDUINO_TYPE_PIN& pin,
+  T count = 3,
+  const unsigned long& delayms = 250) {
+  while (count > 0) {
+    digitalWrite(pin, HIGH);
+    delay(delayms);
+    digitalWrite(pin, LOW);
+    delay(delayms);
+    count--;
+  }
+}
 
 namespace sin {
 
