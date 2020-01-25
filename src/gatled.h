@@ -56,7 +56,7 @@ GOS_ARDUINO_TYPE_DEFAULT_LED output(const T& at) {
 template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN>
 GOS_ARDUINO_TYPE_DEFAULT_LED output(const T& at, T max) {
   max /= T(2);
-  return static_cast<GOS_ARDUINO_TYPE_DEFAULT_LED>(sin(at_) * max + max);
+  return static_cast<GOS_ARDUINO_TYPE_DEFAULT_LED>(sin(at) * max + max);
 }
 
 template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN>
@@ -83,7 +83,7 @@ template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN> void cycle(
     analogWrite(pin, output<T>(at));
     at += step;
   }
-  digitalWrite(pin_, LOW);
+  digitalWrite(pin, LOW);
 }
 
 template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN> void cycle(
@@ -99,7 +99,7 @@ template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN> void cycle(
     at = T();
     --count;
   }
-  digitalWrite(pin_, LOW);
+  digitalWrite(pin, LOW);
 }
 
 template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN> void cycle(
@@ -118,7 +118,7 @@ template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN> void cycle(
     at = T();
     --count;
   }
-  digitalWrite(pin_, LOW);
+  digitalWrite(pin, LOW);
 }
 
 }
