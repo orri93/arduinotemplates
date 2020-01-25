@@ -73,6 +73,21 @@ S read(
   return index;
 }
 
+template<typename S = uint8_t, typename C = char>
+void set(Holder<S, C>& buffer, const int& value, const size_t& size) {
+  ::memset(buffer.Buffer, value, size);
+}
+
+template<typename S = uint8_t, typename C = char>
+void set(Holder<S, C>& buffer, const int& value) {
+  ::memset(buffer.Buffer, value, buffer.Size);
+}
+
+template<typename S = uint8_t, typename C = char>
+void clear(Holder<S, C>& buffer) {
+  ::memset(buffer.Buffer, 0, buffer.Size);
+}
+
 }
 }
 }
