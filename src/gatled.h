@@ -49,7 +49,7 @@ namespace sin {
 template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN>
 GOS_ARDUINO_TYPE_DEFAULT_LED output(const T& at) {
   return static_cast<GOS_ARDUINO_TYPE_DEFAULT_LED>(
-    sin(at_) * GOS_ARDUINO_LED_SIN_MAXIMUM_HALF +
+    sin(at) * GOS_ARDUINO_LED_SIN_MAXIMUM_HALF +
     GOS_ARDUINO_LED_SIN_MAXIMUM_HALF);
 }
 
