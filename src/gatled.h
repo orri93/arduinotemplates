@@ -13,12 +13,20 @@
 #define GOS_ARDUINO_LED_SIN_HEARTBEAT_STEPS 0.001F
 #endif
 
+#ifndef GOS_ARDUINO_LED_SIN_START
+#define GOS_ARDUINO_LED_SIN_START -HALF_PI
+#endif
+
 #ifndef GOS_ARDUINO_LED_SIN_MAXIMUM_AT
 #define GOS_ARDUINO_LED_SIN_MAXIMUM_AT TWO_PI
 #endif
 
 #ifndef GOS_ARDUINO_LED_SIN_MAXIMUM_HALF
 #define GOS_ARDUINO_LED_SIN_MAXIMUM_HALF 0x7f
+#endif
+
+#ifndef GOS_ARDUINO_LED_SIN_MAXIMUM_LOOP
+#define GOS_ARDUINO_LED_SIN_MAXIMUM_LOOP PI + HALF_PI
 #endif
 
 
@@ -46,17 +54,21 @@ void blink(
 
 namespace sin {
 
+template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN> void initialize(T& at) {
+  at = GOS_ARDUINO_LED_SIN_START;
+}
+
 template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN>
 GOS_ARDUINO_TYPE_DEFAULT_LED output(const T& at) {
   return static_cast<GOS_ARDUINO_TYPE_DEFAULT_LED>(
-    sin(at) * GOS_ARDUINO_LED_SIN_MAXIMUM_HALF +
+    ::sin(at) * GOS_ARDUINO_LED_SIN_MAXIMUM_HALF +
     GOS_ARDUINO_LED_SIN_MAXIMUM_HALF);
 }
 
 template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN>
 GOS_ARDUINO_TYPE_DEFAULT_LED output(const T& at, T max) {
   max /= T(2);
-  return static_cast<GOS_ARDUINO_TYPE_DEFAULT_LED>(sin(at) * max + max);
+  return static_cast<GOS_ARDUINO_TYPE_DEFAULT_LED>(::sin(at) * max + max);
 }
 
 template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN>
@@ -70,17 +82,17 @@ void loop(
   T& at,
   const T& step = GOS_ARDUINO_LED_SIN_HEARTBEAT_STEPS) {
   analogWrite(pin, output<T>(at));
-  step<T>(at, step);
+  ::gos::atl::led::sin::step<T>(at, step);
 }
 
 namespace full {
 
 template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN> void cycle(
   const GOS_ARDUINO_TYPE_PIN& pin,
-  T at = 0.0,
+  T at = GOS_ARDUINO_LED_SIN_START,
   const T& step = GOS_ARDUINO_LED_SIN_HEARTBEAT_STEPS) {
-  while (at < GOS_ARDUINO_LED_SIN_MAXIMUM_AT) {
-    analogWrite(pin, output<T>(at));
+  while (at < GOS_ARDUINO_LED_SIN_MAXIMUM_LOOP) {
+    analogWrite(pin, ::gos::atl::led::sin::output<T>(at));
     at += step;
   }
   digitalWrite(pin, LOW);
@@ -89,14 +101,14 @@ template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN> void cycle(
 template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN> void cycle(
   const GOS_ARDUINO_TYPE_PIN& pin,
   uint8_t count,
-  T at = 0.0,
+  T at = GOS_ARDUINO_LED_SIN_START,
   const T& step = GOS_ARDUINO_LED_SIN_HEARTBEAT_STEPS) {
   while (count > 0) {
-    while (at < GOS_ARDUINO_LED_SIN_MAXIMUM_AT) {
-      analogWrite(pin, output<T>(at));
+    while (at < GOS_ARDUINO_LED_SIN_MAXIMUM_LOOP) {
+      analogWrite(pin, ::gos::atl::led::sin::output<T>(at));
       at += step;
     }
-    at = T();
+    at = GOS_ARDUINO_LED_SIN_START;
     --count;
   }
   digitalWrite(pin, LOW);
@@ -106,16 +118,15 @@ template<typename T = GOS_ARDUINO_TYPE_DEFAULT_SIN> void cycle(
   const GOS_ARDUINO_TYPE_PIN& pin,
   const unsigned long& delayms,
   uint8_t count,
-  T at = 0.0,
-  const T& step = GOS_ARDUINO_LED_SIN_HEARTBEAT_STEPS,
-  const unsigned long& delayms = 0) {
+  T at = GOS_ARDUINO_LED_SIN_START,
+  const T& step = GOS_ARDUINO_LED_SIN_HEARTBEAT_STEPS) {
   while(count > 0) {
-    while (at < GOS_ARDUINO_LED_SIN_MAXIMUM_AT) {
-      analogWrite(pin, output<T>(at));
+    while (at < GOS_ARDUINO_LED_SIN_MAXIMUM_LOOP) {
+      analogWrite(pin, ::gos::atl::led::sin::output<T>(at));
       delay(delayms);
       at += step;
     }
-    at = T();
+    at = GOS_ARDUINO_LED_SIN_START;
     --count;
   }
   digitalWrite(pin, LOW);
