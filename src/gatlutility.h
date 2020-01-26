@@ -20,10 +20,6 @@ C read(::gos::atl::buffer::Holder<S, char>& buffer, const S& length) {
   return R();
 }
 template<typename C = uint16_t, typename I = uint16_t, typename S = uint16_t>
-C calculate(::gos::atl::buffer::Holder<S, char>& buffer) {
-  return calculate<C, I, S>(buffer, buffer.Size);
-}
-template<typename C = uint16_t, typename I = uint16_t, typename S = uint16_t>
 C calculate(::gos::atl::buffer::Holder<S, char>& buffer, const S& length) {
   I i, j;
   C crc = 0xFFFF;
@@ -46,6 +42,10 @@ C calculate(::gos::atl::buffer::Holder<S, char>& buffer, const S& length) {
   }
 
   return crc;
+}
+template<typename C = uint16_t, typename I = uint16_t, typename S = uint16_t>
+C calculate(::gos::atl::buffer::Holder<S, char>& buffer) {
+  return calculate<C, I, S>(buffer, buffer.Size);
 }
 }
 
