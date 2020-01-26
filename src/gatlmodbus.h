@@ -269,6 +269,12 @@ public:
     const T& length) {
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
   }
+  virtual MODBUS_TYPE_RESULT ReadDiscreteInputs(
+    const MODBUS_TYPE_FUNCTION& function,
+    const T& address,
+    const T& length) {
+    return MODBUS_STATUS_ILLEGAL_FUNCTION;
+  }
   virtual MODBUS_TYPE_RESULT ReadHoldingRegisters(
     const MODBUS_TYPE_FUNCTION& function,
     const T& address,
@@ -680,7 +686,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
       return handler.ReadCoils(index, first, length);
     } else {
       index = MODBUS_CB_READ_DISCRETE_INPUTS;
-      return handler.ReadCoils(index, first, length);
+      return handler.ReadDiscreteInputs(index, first, length);
     }
   case MODBUS_FC_READ_HOLDING_REGISTERS: // read holding registers
   case MODBUS_FC_READ_INPUT_REGISTERS:   // read input registers
