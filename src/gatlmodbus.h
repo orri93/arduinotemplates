@@ -682,7 +682,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
   * Match the function code with a callback and execute it
   * as well as preparing the response buffer
   */
-  switch (response.Buffer[MODBUS_FUNCTION_CODE_INDEX]) {
+  switch (request.Buffer[MODBUS_FUNCTION_CODE_INDEX]) {
   case MODBUS_FC_READ_EXCEPTION_STATUS:
     // add response data length to output buffer length
     variable.Length.Response += 1;
