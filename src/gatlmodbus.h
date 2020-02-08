@@ -317,8 +317,6 @@ template<typename T = MODBUS_TYPE_DEFAULT> struct Index {
 
 template<typename T = MODBUS_TYPE_DEFAULT> struct Length {
   typedef bool state;
-  T Sent;
-  T Received;
   T Transmission;
   T Request;
   T Response;
@@ -405,8 +403,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> T response(
   if (variable.Index.Write == 0) {
     // if we still need to wait
     if ((micros() - variable.Time.Last) <= (MODBUS_TYPE_TIME)
-      (variable.Time.Half * MODBUS_HALF_SILENCE_MULTIPLIER))
-    {
+      (variable.Time.Half * MODBUS_HALF_SILENCE_MULTIPLIER)) {
       // ignore
       return 0;
     }
@@ -442,7 +439,6 @@ template<typename T = MODBUS_TYPE_DEFAULT> T response(
         (MODBUS_TYPE_BUFFER*)(response.Buffer + variable.Index.Write),
         static_cast<size_t>(length)));
       variable.Index.Write += length;
-      variable.Length.Sent += length;
     }
 
     if (stream.availableForWrite() < variable.Length.Transmission)
@@ -467,7 +463,6 @@ template<typename T = MODBUS_TYPE_DEFAULT> T response(
     }
 
     variable.Index.Write += length;
-    variable.Length.Sent += length;
   }
 
   if (variable.Index.Write >= variable.Length.Response &&
@@ -543,7 +538,6 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool request(
 
       // move byte pointer forward
       variable.Length.Request += length;
-      variable.Length.Received += length;
     }
 
     // save the time of last received byte(s)
@@ -816,8 +810,6 @@ template<typename T = MODBUS_TYPE_DEFAULT> void begin(
   ::gos::atl::modbus::structures::Variable<T>& variable,
   const MODBUS_TYPE_RATE& rate) {
   variable.Index.Write = T();
-  variable.Length.Sent = T();
-  variable.Length.Received = T();
   variable.Length.Response = T();
   variable.Reading = false;
   variable.Writing = false;
@@ -1089,12 +1081,10 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT mexception(
     return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
   }
 
-  if (status)
-  {
-    bitSet(response.Buffer[index], bitindex);
-  } else
-  {
-    bitClear(response.Buffer[index], bitindex);
+  if (status) {
+    bitSet((response.Buffer[index]), bitindex);
+  } else {
+    bitClear((response.Buffer[index]), bitindex);
   }
 
   return MODBUS_STATUS_OK;
@@ -1112,9 +1102,9 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
     variable, request, response, offset, index, bitindex);
   if (result == MODBUS_STATUS_OK) {
     if (status) {
-      bitSet(response.Buffer[index], bitindex);
+      bitSet((response.Buffer[index]), bitindex);
     } else {
-      bitClear(response.Buffer[index], bitindex);
+      bitClear((response.Buffer[index]), bitindex);
     }
   }
   return result;
