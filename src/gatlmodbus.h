@@ -342,15 +342,13 @@ namespace details {
 namespace crc {
 
 template<typename T = MODBUS_TYPE_DEFAULT> T calculate(
-  ::gos::atl::buffer::Holder<T, char>& buffer, const T& length) {
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& buffer, const T& length) {
   T i, j;
   T crc = 0xFFFF;
   T tmp;
-
   // calculate crc
   for (i = 0; i < length; i++) {
     crc ^= buffer.Buffer[i];
-
     for (j = 0; j < 8; j++) {
       tmp = crc & 0x0001;
       crc = crc >> 1;
@@ -374,7 +372,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> T response(
   Stream& stream,
   const ::gos::atl::modbus::structures::Parameter<T> parameter,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& response) {
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response) {
   /**
   * Validate
   */
@@ -489,7 +487,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool request(
   Stream& stream,
   const ::gos::atl::modbus::structures::Parameter<T> parameter,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request) {
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request) {
   /**
   * Read one data packet and report when received completely
   */
@@ -575,8 +573,8 @@ MODBUS_TYPE_RESULT mexception(
   Stream& stream,
   const ::gos::atl::modbus::structures::Parameter<T> parameter,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const MODBUS_TYPE_CODE& code) {
   // we don't respond to broadcast messages
   if (request.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS)
@@ -597,8 +595,8 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool request(
   Stream& stream,
   const ::gos::atl::modbus::structures::Parameter<T> parameter,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response) {
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response) {
   // minimum buffer size (1 x Address, 1 x Function, n x Data, 2 x CRC)
   T expectedrequestbuffersize = MODBUS_FRAME_SIZE;
   // check data validity based on the function code
@@ -667,8 +665,8 @@ namespace create {
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
     ::gos::atl::modbus::Handler<T>& handler,
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
-    ::gos::atl::buffer::Holder<T, char>& response) {
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response) {
   T first, length;
   MODBUS_TYPE_FUNCTION index;
 
@@ -832,8 +830,8 @@ template<typename T = MODBUS_TYPE_DEFAULT> T loop(
     const ::gos::atl::modbus::structures::Parameter<T> parameter,
     ::gos::atl::modbus::Handler<T>& handler,
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
-    ::gos::atl::buffer::Holder<T, char>& response) {
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response) {
   if (variable.Writing) {
     ::gos::atl::modbus::details::write::response<T>(
       stream,
@@ -893,7 +891,7 @@ namespace index {
 namespace access {
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     const T& offset,
     T& index,
     MODBUS_TYPE_BIT_INDEX& bitindex) {
@@ -916,7 +914,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
 }
 template<typename T = MODBUS_TYPE_DEFAULT> bool registers(
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     const T& offset,
     T& index) {
   if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] == MODBUS_FC_WRITE_REGISTER) {
@@ -941,8 +939,8 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool registers(
 namespace provide {
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
-    ::gos::atl::buffer::Holder<T, char>& response,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
     const T& offset,
     //  const bool& state,
     T& index,
@@ -969,7 +967,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
 
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     const T& offset,
     T& index) {
   // check function code
@@ -997,7 +995,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
 namespace access {
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_FUNCTION function(
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request) {
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request) {
   if (variable.Length.RequestBuffer >= MODBUS_FRAME_SIZE &&
     !variable.Is.RequestBufferReading)
   {
@@ -1009,7 +1007,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_FUNCTION function(
 namespace unit {
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_FUNCTION address(
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request) {
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request) {
   if (variable.Length.RequestBuffer >= MODBUS_FRAME_SIZE &&
     !variable.Is.RequestBufferReading)
   {
@@ -1022,7 +1020,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_FUNCTION address(
 namespace broadcast {
 template<typename T = MODBUS_TYPE_DEFAULT> bool is(
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request) {
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request) {
   return ::gos::atl::modbus::access::unit::address<T>(variable, request) ==
     MODBUS_BROADCAST_ADDRESS;
 }
@@ -1030,7 +1028,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool is(
 
 template<typename T = MODBUS_TYPE_DEFAULT> bool coil(
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
   const T& offset) {
   T index;
   MODBUS_TYPE_BIT_INDEX bindex;
@@ -1044,7 +1042,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool coil(
 
 template<typename T = MODBUS_TYPE_DEFAULT> T registers(
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     const T& offset) {
   T index;
   if (::gos::atl::modbus::index::access::registers<T>(
@@ -1061,8 +1059,8 @@ namespace provide {
 
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT mexception(
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
-    ::gos::atl::buffer::Holder<T, char>& response,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
     const T& offset,
     const bool& status) {
   // check function code
@@ -1092,8 +1090,8 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT mexception(
 
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
-    ::gos::atl::buffer::Holder<T, char>& response,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
     const T& offset,
     const bool& status) {
   T index;
@@ -1112,8 +1110,8 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
 
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT discrete(
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
-    ::gos::atl::buffer::Holder<T, char>& response,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
     const T& offset,
     const bool& status) {
   return coil<T>(variable, request, response, offset, status);
@@ -1121,8 +1119,8 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT discrete(
 
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
-    ::gos::atl::buffer::Holder<T, char>& response,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
     const T& offset,
     const T& value) {
   // check function code
@@ -1150,7 +1148,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
 
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT string(
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& response,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
     const T& offset,
     const char* string,
     const T& length) {
@@ -1190,8 +1188,8 @@ template<typename B, typename T = MODBUS_TYPE_DEFAULT>
 ::gos::atl::modbus::binding::result access(
   ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const T& start,       // Start address for the modbus function
   const T& length) {    // Length of the buffer for the modbus function
   ::gos::atl::modbus::binding::result result;
@@ -1214,8 +1212,8 @@ template<typename B, typename T = MODBUS_TYPE_DEFAULT>
 ::gos::atl::modbus::binding::result assign(
   ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const T& start,    // Start address for the modbus function
   const T& length,   // Length of the buffer for the modbus function
   MODBUS_TYPE_DEFAULT& address,
@@ -1244,8 +1242,8 @@ template<typename B, typename T = MODBUS_TYPE_DEFAULT>
 ::gos::atl::modbus::binding::result access(
   ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const T& start,       // Start address for the modbus function
   const T& length) {    // Length of the buffer for the modbus function
   ::gos::atl::modbus::binding::result result;
@@ -1274,8 +1272,8 @@ template<
 ::gos::atl::modbus::binding::result access(
     ::gos::atl::binding::reference<B, T, I>& binding,
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
-    ::gos::atl::buffer::Holder<T, char>& response,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
     const T& start,       // Start address for the modbus function
     const T& length) {    // Length of the buffer for the modbus function
   ::gos::atl::modbus::binding::result result;
@@ -1298,8 +1296,8 @@ template<typename B, typename T = MODBUS_TYPE_DEFAULT>
 ::gos::atl::modbus::binding::result access(
   ::gos::atl::binding::barray::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const T& start,       // Start address for the modbus function
   const T& length) {    // Length of the buffer for the modbus function
   ::gos::atl::modbus::binding::result result;
@@ -1323,8 +1321,8 @@ template<typename B, typename T = MODBUS_TYPE_DEFAULT>
 ::gos::atl::modbus::binding::result assign(
   ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const T& start,    // Start address for the modbus function
   const T& length,   // Length of the buffer for the modbus function
   MODBUS_TYPE_DEFAULT& address,
@@ -1350,8 +1348,8 @@ template<typename B, typename T = MODBUS_TYPE_DEFAULT>
 ::gos::atl::modbus::binding::result assign(
   ::gos::atl::binding::barray::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const T& start,    // Start address for the modbus function
   const T& length,   // Length of the buffer for the modbus function
   MODBUS_TYPE_DEFAULT& address,
@@ -1381,8 +1379,8 @@ template<typename B, typename T = MODBUS_TYPE_DEFAULT>
 ::gos::atl::modbus::binding::result access(
   ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const T& start,       // Start address for the modbus function
   const T& length) {    // Length of the buffer for the modbus function
   ::gos::atl::modbus::binding::result result;
@@ -1411,8 +1409,8 @@ template<typename B, typename T = MODBUS_TYPE_DEFAULT >
 ::gos::atl::modbus::binding::result access(
   ::gos::atl::binding::barray::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const T& start,       // Start address for the modbus function
   const T& length) {    // Length of the buffer for the modbus function
   ::gos::atl::modbus::binding::result result;
@@ -1440,8 +1438,8 @@ template<typename B, typename T = MODBUS_TYPE_DEFAULT >
 template<typename B, typename T = MODBUS_TYPE_DEFAULT> ::gos::atl::modbus::binding::result assign(
     ::gos::atl::binding::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
     ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, char>& request,
-    ::gos::atl::buffer::Holder<T, char>& response,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
     const T& start,    // Start address for the modbus function
     const T& length,   // Length of the buffer for the modbus function
     MODBUS_TYPE_DEFAULT& address,
@@ -1468,8 +1466,8 @@ template<typename B, typename T = MODBUS_TYPE_DEFAULT>
 ::gos::atl::modbus::binding::result assign(
   ::gos::atl::binding::barray::reference<B, T, MODBUS_TYPE_BIND_INDEX>& binding,
   ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, char>& request,
-  ::gos::atl::buffer::Holder<T, char>& response,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const T& start,    // Start address for the modbus function
   const T& length,   // Length of the buffer for the modbus function
   MODBUS_TYPE_DEFAULT& address,
