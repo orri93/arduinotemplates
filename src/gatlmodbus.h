@@ -354,7 +354,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> T calculate(
     crc ^= buffer.Buffer[i];
 
     for (j = 0; j < 8; j++) {
-      tmp &= 0x0001;
+      tmp = crc & 0x0001;
       crc = crc >> 1;
       if (tmp) {
         crc ^= 0xA001;
@@ -389,7 +389,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> T response(
 
   // check if we are not in writing or the address is broadcast
   if (!variable.Writing ||
-    response.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS) {
+    (response.Buffer[MODBUS_ADDRESS_INDEX]) == MODBUS_BROADCAST_ADDRESS) {
     // cleanup and ignore
     variable.Writing = false;
     variable.Index.Write = 0;
@@ -700,8 +700,8 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
     /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
 
     // calculate response data length and add to output buffer length
-    request.Buffer[MODBUS_DATA_INDEX] = (length / 8) + (length % 8 != 0);
-    variable.Length.Response += 1 + request.Buffer[MODBUS_DATA_INDEX];
+    response.Buffer[MODBUS_DATA_INDEX] = (length / 8) + (length % 8 != 0);
+    variable.Length.Response += 1 + (response.Buffer[MODBUS_DATA_INDEX]);
 
     // execute callback and return the status code
     if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
@@ -723,7 +723,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
     response.Buffer[MODBUS_DATA_INDEX] = 2 * length;
 
     // calculate response data length and add to output buffer length
-    variable.Length.Response += 1 + response.Buffer[MODBUS_DATA_INDEX];
+    variable.Length.Response += 1 + (response.Buffer[MODBUS_DATA_INDEX]);
 
     // execute callback and return the status code
     if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
