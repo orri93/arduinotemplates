@@ -341,6 +341,31 @@ template< typename T = MODBUS_TYPE_DEFAULT> struct Variable {
 
 namespace details {
 
+namespace crc {
+
+template<typename T = MODBUS_TYPE_DEFAULT> T calculate(
+  ::gos::atl::buffer::Holder<T, char>& buffer, const T& length) {
+  T i, j;
+  T crc = 0xFFFF;
+  T tmp;
+
+  // calculate crc
+  for (i = 0; i < length; i++) {
+    crc ^= buffer.Buffer[i];
+
+    for (j = 0; j < 8; j++) {
+      tmp &= 0x0001;
+      crc = crc >> 1;
+      if (tmp) {
+        crc ^= 0xA001;
+      }
+    }
+  }
+  return crc;
+}
+
+}
+
 namespace write {
 /**
  * Writes the output buffer to serial stream
@@ -387,7 +412,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> T response(
     }
 
     // calculate and fill crc
-    T crc = ::gos::atl::utility::crc::calculate<T, T, T>(
+    T crc = ::gos::atl::modbus::details::crc::calculate<T>(
       response,
       variable.Length.Response - MODBUS_CRC_LENGTH);
     response.Buffer[variable.Length.Response - MODBUS_CRC_LENGTH] =
@@ -639,9 +664,8 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool request(
 
   // check crc
   T crc = MODBUS_READ_READCRC(request.Buffer, variable.Length.Request);
-  return ::gos::atl::utility::crc::calculate<T, T, T>(
-    request,
-    variable.Length.Request  - MODBUS_CRC_LENGTH) == crc;
+  return ::gos::atl::modbus::details::crc::calculate<T>(
+    request, variable.Length.Request - MODBUS_CRC_LENGTH) == crc;
 }
 } // validate namespace
 
