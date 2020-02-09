@@ -10,19 +10,19 @@ namespace atl {
 
 namespace string {
 
-template<typename T, typename S = uint8_t, typename C = uint8_t>
-void copy(Holder<S>& buffer, const T* str) {
-  ::strncpy(buffer.Buffer, str, buffer.Size);
+template<typename S = uint8_t, typename C = char>
+void copy(::gos::atl:buffer::Holder<S, C>& holder, const char* str) {
+  ::strncpy((char*)(holder.Buffer), str, holder.Size);
 }
 
-template<typename T, typename S = uint8_t, typename C = uint8_t>
-int compare(Holder<S>& buffer, const T* str) {
-  return ::strncmp(buffer.Buffer, str, buffer.Size);
+template<typename S = uint8_t, typename C = char>
+int compare(const ::gos::atl:buffer::Holder<S, C>& holder, const char* str) {
+  return ::strncmp((const char*)(holder.Buffer), str, holder.Size);
 }
 
-}
+} // namespace string
 
-}
-}
+} // namespace atl
+} // namespace gos
 
-#endif /* _GOS_ARDUINO_TEMPLATE_LIBRARY_FORMAT_H_ */
+#endif /* _GOS_ARDUINO_TEMPLATE_LIBRARY_STRING_H_ */
