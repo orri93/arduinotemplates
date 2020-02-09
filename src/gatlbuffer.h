@@ -88,8 +88,8 @@ void clear(Holder<S, C>& buffer) {
   ::memset(buffer.Buffer, 0, buffer.Size);
 }
 
-}
-}
-}
+} // namespace buffer
+} // namespace atl
+} // namespace gos
 
 #endif /* _GOS_ARDUINO_TEMPLATE_LIBRARY_BUFFER_H_ */
