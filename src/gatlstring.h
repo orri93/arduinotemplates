@@ -11,12 +11,12 @@ namespace atl {
 namespace string {
 
 template<typename S = uint8_t, typename C = char>
-void copy(::gos::atl:buffer::Holder<S, C>& holder, const char* str) {
+void copy(::gos::atl::buffer::Holder<S, C>& holder, const char* str) {
   ::strncpy((char*)(holder.Buffer), str, holder.Size);
 }
 
 template<typename S = uint8_t, typename C = char>
-int compare(const ::gos::atl:buffer::Holder<S, C>& holder, const char* str) {
+int compare(const ::gos::atl::buffer::Holder<S, C>& holder, const char* str) {
   return ::strncmp((const char*)(holder.Buffer), str, holder.Size);
 }
 
