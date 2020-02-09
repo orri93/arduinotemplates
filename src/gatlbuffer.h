@@ -34,11 +34,6 @@ public:
 };
 
 template<typename T, typename S = uint8_t, typename C = uint8_t>
-void strncpy(Holder<S>& buffer, const T* str) {
-  ::strncpy(buffer.Buffer, str, buffer.Size);
-}
-
-template<typename T, typename S = uint8_t, typename C = uint8_t>
 S write(Holder<S>& buffer, const S& size, const S& index, T* pointer) {
   C* cp = (C*)(pointer);
   for (S i = 0; i < size; i++) {
