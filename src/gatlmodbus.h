@@ -69,7 +69,6 @@
 
 #define MODBUS_INVALID_UNIT_ADDRESS 255
 #define MODBUS_DEFAULT_UNIT_ADDRESS 1
-#define MODBUS_CONTROL_PIN_NONE -1
 
  /**
   * Modbus function codes
@@ -85,18 +84,6 @@ enum {
   MODBUS_FC_READ_EXCEPTION_STATUS = 7,
   MODBUS_FC_WRITE_MULTIPLE_COILS = 15,
   MODBUS_FC_WRITE_MULTIPLE_REGISTERS = 16
-};
-
-enum {
-  MODBUS_CB_MIN = 0,
-  MODBUS_CB_READ_COILS = MODBUS_CB_MIN,
-  MODBUS_CB_READ_DISCRETE_INPUTS,
-  MODBUS_CB_READ_HOLDING_REGISTERS,
-  MODBUS_CB_READ_INPUT_REGISTERS,
-  MODBUS_CB_WRITE_COILS,
-  MODBUS_CB_WRITE_HOLDING_REGISTERS,
-  MODBUS_CB_READ_EXCEPTION_STATUS,
-  MODBUS_CB_MAX
 };
 
 enum {
@@ -264,25 +251,21 @@ template<typename T = MODBUS_TYPE_DEFAULT> class Handler {
 public:
   virtual ~Handler() {}
   virtual MODBUS_TYPE_RESULT ReadCoils(
-    const MODBUS_TYPE_FUNCTION& function,
     const T& address,
     const T& length) {
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
   }
   virtual MODBUS_TYPE_RESULT ReadDiscreteInputs(
-    const MODBUS_TYPE_FUNCTION& function,
     const T& address,
     const T& length) {
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
   }
   virtual MODBUS_TYPE_RESULT ReadHoldingRegisters(
-    const MODBUS_TYPE_FUNCTION& function,
     const T& address,
     const T& length) {
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
   }
   virtual MODBUS_TYPE_RESULT ReadInputRegisters(
-    const MODBUS_TYPE_FUNCTION& function,
     const T& address,
     const T& length) {
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
@@ -299,8 +282,7 @@ public:
     const T& length) {
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
   }
-  virtual MODBUS_TYPE_RESULT ReadExceptionStatus(
-    const MODBUS_TYPE_FUNCTION& function) {
+  virtual MODBUS_TYPE_RESULT ReadExceptionStatus() {
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
   }
 };
@@ -308,7 +290,9 @@ public:
 namespace structures {
 template<typename T = MODBUS_TYPE_DEFAULT> struct Parameter {
   T Id;
+#ifndef MODBUS_NONE_CONTROL_PIN
   MODBUS_TYPE_PIN Control;
+#endif
 };
 
 template<typename T = MODBUS_TYPE_DEFAULT> struct Index {
@@ -340,16 +324,16 @@ template< typename T = MODBUS_TYPE_DEFAULT> struct Variable {
 namespace details {
 
 namespace crc {
-
 template<typename T = MODBUS_TYPE_DEFAULT> T calculate(
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& buffer, const T& length) {
-  T i, j;
+  uint8_t j;
+  T j;
   T crc = 0xFFFF;
   T tmp;
   // calculate crc
-  for (i = 0; i < length; i++) {
+  for (i = 0; i < length; ++i) {
     crc ^= buffer.Buffer[i];
-    for (j = 0; j < 8; j++) {
+    for (j = 0; j < 8; ++j) {
       tmp = crc & 0x0001;
       crc = crc >> 1;
       if (tmp) {
@@ -359,7 +343,16 @@ template<typename T = MODBUS_TYPE_DEFAULT> T calculate(
   }
   return crc;
 }
+} // namespace crc
 
+namespace check {
+namespace relevant {
+template<typename T = MODBUS_TYPE_DEFAULT> inline bool address(
+  const ::gos::atl::modbus::structures::Parameter<T> parameter,
+  const MODBUS_TYPE_BUFFER& unit) {
+  return unit == MODBUS_BROADCAST_ADDRESS || unit == parameter.Id;
+}
+}
 }
 
 namespace write {
@@ -416,18 +409,19 @@ template<typename T = MODBUS_TYPE_DEFAULT> T response(
       crc >> 8;
 
     // enter transmission mode
-    if (parameter.Control > MODBUS_CONTROL_PIN_NONE) {
-      digitalWrite(parameter.Control, HIGH);
-    }
+#ifndef MODBUS_NONE_CONTROL_PIN
+    digitalWrite(parameter.Control, HIGH);
+#endif
   }
 
   /**
     * Transmit
     */
 
-    // send buffer
-  T length = 0;
+  // send buffer
+  T length;
   if (variable.Length.Transmission > 0) {
+    /* Her was a redeclaration of the a new length variable */
     length = min(
       stream.availableForWrite(),
       variable.Length.Response - variable.Index.Write);
@@ -449,6 +443,9 @@ template<typename T = MODBUS_TYPE_DEFAULT> T response(
     // if buffer reports as empty; make sure it really is 
     // (`Serial` removes bytes from buffer before sending them)
     stream.flush();
+    
+    /* Set to zero to mimic the inner declaration of the original code */
+    length = 0;
   } else {
     // compatibility for badly written software serials; aka AltSoftSerial
     length = variable.Length.Response - variable.Index.Write;
@@ -468,9 +465,9 @@ template<typename T = MODBUS_TYPE_DEFAULT> T response(
     (MODBUS_TYPE_TIME)(variable.Time.Half * MODBUS_HALF_SILENCE_MULTIPLIER)) {
 
     // end transmission
-    if (parameter.Control > MODBUS_CONTROL_PIN_NONE) {
-      digitalWrite(parameter.Control, LOW);
-    }
+#ifndef MODBUS_NONE_CONTROL_PIN
+    digitalWrite(parameter.Control, LOW);
+#endif
 
     // cleanup
     variable.Writing = false;
@@ -493,14 +490,14 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool request(
   */
   T length = (T)(stream.available());
 
-  if (length > T()) {
+  if (length > 0) {
     // if not yet started reading
     if (!variable.Reading) {
       // And it already took 1.5T from the last message
       if ((micros() - variable.Time.Last) > (MODBUS_TYPE_TIME)
         (variable.Time.Half * MODBUS_HALF_SILENCE_MULTIPLIER)) {
         // start reading and clear buffer
-        variable.Length.Request = T();
+        variable.Length.Request = 0;
         variable.Reading = true;
       } else {
         // discard data
@@ -516,20 +513,14 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool request(
       }
       // add new bytes to buffer
       length = min(length, request.Size - variable.Length.Request);
-#ifdef FIX_BUG
-      length = (T)(stream.readBytes(
-        request.Buffer + variable.Length.Request,
-        static_cast<size_t>(request.Size - variable.Length.Request)));
-#else
+      /* Use to use the size - length and ignoring the min */
       length = (T)(stream.readBytes(
         request.Buffer + variable.Length.Request, length));
-#endif
 
       // if this is the first read, check the address to reject irrelevant
       if (variable.Length.Request == 0 &&
         length > MODBUS_ADDRESS_INDEX &&
-        (request.Buffer[MODBUS_ADDRESS_INDEX] != parameter.Id &&
-          request.Buffer[MODBUS_ADDRESS_INDEX] != MODBUS_BROADCAST_ADDRESS)) {
+        !check::relevant::address(parameter, request.Buffer[MODBUS_ADDRESS_INDEX])) {
         // bad address, stop reading
         variable.Reading = false;
       }
@@ -549,7 +540,6 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool request(
       (variable.Time.Half * MODBUS_HALF_SILENCE_MULTIPLIER))) {
       // allow for new requests to be processed
       variable.Reading = false;
-      return variable.Length.Request >= MODBUS_FRAME_SIZE;
     } else {
       // otherwise, wait
       return false;
@@ -577,8 +567,7 @@ MODBUS_TYPE_RESULT mexception(
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
   const MODBUS_TYPE_CODE& code) {
   // we don't respond to broadcast messages
-  if (request.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS)
-  {
+  if (request.Buffer[MODBUS_ADDRESS_INDEX] == MODBUS_BROADCAST_ADDRESS) {
     return 0;
   }
   variable.Length.Response = MODBUS_FRAME_SIZE + 1;
@@ -621,7 +610,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool request(
     expectedrequestbuffersize += 4;
     break;
   case MODBUS_FC_WRITE_COIL:     // write coils (digital write)
-  case MODBUS_FC_WRITE_REGISTER: // write regosters (digital write)
+  case MODBUS_FC_WRITE_REGISTER: // write registers (digital write)
       // (2 x Index, 2 x Count)
     expectedrequestbuffersize += 4;
     break;
@@ -668,131 +657,110 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response) {
   T first, length;
-  MODBUS_TYPE_FUNCTION index;
+  MODBUS_TYPE_BUFFER function = request.Buffer[MODBUS_FUNCTION_CODE_INDEX];
 
   /**
   * Match the function code with a callback and execute it
   * as well as preparing the response buffer
   */
-  switch (request.Buffer[MODBUS_FUNCTION_CODE_INDEX]) {
+  switch (function) {
   case MODBUS_FC_READ_EXCEPTION_STATUS:
     // add response data length to output buffer length
     variable.Length.Response += 1;
 
     // execute callback and return the status code
-    return handler.ReadExceptionStatus(MODBUS_CB_READ_EXCEPTION_STATUS);
-
+    return handler.ReadExceptionStatus();
   case MODBUS_FC_READ_COILS:          // read coils (digital out state)
   case MODBUS_FC_READ_DISCRETE_INPUT: // read input state (digital in)
     // read the the first input address and the number of inputs
-    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
-    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
-
-    length = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
-    /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
+    length = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2);
 
     // calculate response data length and add to output buffer length
     response.Buffer[MODBUS_DATA_INDEX] = (length / 8) + (length % 8 != 0);
     variable.Length.Response += 1 + (response.Buffer[MODBUS_DATA_INDEX]);
 
     // execute callback and return the status code
-    if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
-      MODBUS_FC_READ_COILS) {
-      index = MODBUS_CB_READ_COILS;
-      return handler.ReadCoils(index, first, length);
+    if (function == MODBUS_FC_READ_COILS) {
+      return handler.ReadCoils(first, length);
     } else {
-      index = MODBUS_CB_READ_DISCRETE_INPUTS;
-      return handler.ReadDiscreteInputs(index, first, length);
+      return handler.ReadDiscreteInputs(first, length);
     }
   case MODBUS_FC_READ_HOLDING_REGISTERS: // read holding registers
   case MODBUS_FC_READ_INPUT_REGISTERS:   // read input registers
-      // read the starting address and the number of inputs
-    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
-    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
-    length = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
-    /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
-
-    response.Buffer[MODBUS_DATA_INDEX] = 2 * length;
+    // read the starting address and the number of inputs
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
+    length = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2);
 
     // calculate response data length and add to output buffer length
+    response.Buffer[MODBUS_DATA_INDEX] = 2 * length;
     variable.Length.Response += 1 + (response.Buffer[MODBUS_DATA_INDEX]);
 
     // execute callback and return the status code
-    if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
-      MODBUS_FC_READ_HOLDING_REGISTERS) {
-      index = MODBUS_CB_READ_HOLDING_REGISTERS;
-      return handler.ReadHoldingRegisters(index, first, length);
+    if (function == MODBUS_FC_READ_HOLDING_REGISTERS) {
+      return handler.ReadHoldingRegisters(first, length);
     } else {
-      index = MODBUS_CB_READ_INPUT_REGISTERS;
-      return handler.ReadInputRegisters(index, first, length);
+      return handler.ReadInputRegisters(first, length);
     }
   case MODBUS_FC_WRITE_COIL: // write one coil (digital out)
-      // read the address
-
-    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
-    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
+    // read the address
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
 
     // add response data length to output buffer length
     variable.Length.Response += 4;
     // copy parts of the request data that need to be in the response data
     ::memcpy(
-      (void*)(response.Buffer + MODBUS_DATA_INDEX),
-      (const void*)(request.Buffer + MODBUS_DATA_INDEX),
+      (void*)((response.Buffer) + MODBUS_DATA_INDEX),
+      (const void*)((request.Buffer) + MODBUS_DATA_INDEX),
       variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
-    return handler.WriteCoils(MODBUS_CB_WRITE_COILS, first, 1);
+    return handler.WriteCoils(MODBUS_FC_WRITE_COIL, first, 1);
   case MODBUS_FC_WRITE_REGISTER:
     // read the address
-    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
-    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
 
     // add response data length to output buffer length
     variable.Length.Response += 4;
     // copy parts of the request data that need to be in the response data
     ::memcpy(
-      response.Buffer + MODBUS_DATA_INDEX,
-      request.Buffer + MODBUS_DATA_INDEX,
+      (void*)((response.Buffer) + MODBUS_DATA_INDEX),
+      (const void*)((request.Buffer) + MODBUS_DATA_INDEX),
       variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
-    return handler.WriteHoldingRegisters(
-      MODBUS_CB_WRITE_HOLDING_REGISTERS, first, 1);
+    return handler.WriteHoldingRegisters(MODBUS_FC_WRITE_REGISTER, first, 1);
   case MODBUS_FC_WRITE_MULTIPLE_COILS: // write coils (digital out)
-      // read the starting address and the number of outputs
-    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
-    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
-    length = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
-    /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
+    // read the starting address and the number of outputs
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
+    length = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2);
 
     // add response data length to output buffer length
     variable.Length.Response += 4;
     // copy parts of the request data that need to be in the response data
     ::memcpy(
-      response.Buffer + MODBUS_DATA_INDEX,
-      request.Buffer + MODBUS_DATA_INDEX,
+      (void*)((response.Buffer) + MODBUS_DATA_INDEX),
+      (const void*)((request.Buffer) + MODBUS_DATA_INDEX),
       variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
-    return handler.WriteCoils(MODBUS_CB_WRITE_COILS, first, length);
+    return handler.WriteCoils(MODBUS_FC_WRITE_MULTIPLE_COILS, first, length);
   case MODBUS_FC_WRITE_MULTIPLE_REGISTERS: // write holding registers
-      // read the starting address and the number of outputs
-    first = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX));
-    /* first = read::uint16<A, I, S>(request, MODBUS_DATA_INDEX); */
-    length = (T)(MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2));
-    /* length = read::uint16<L, I, S>(request, MODBUS_DATA_INDEX + 2); */
+    // read the starting address and the number of outputs
+    first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
+    length = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2);
 
     // add response data length to output buffer length
     variable.Length.Response += 4;
     // copy parts of the request data that need to be in the response data
     ::memcpy(
-      response.Buffer + MODBUS_DATA_INDEX,
-      request.Buffer + MODBUS_DATA_INDEX,
+      (void*)((response.Buffer) + MODBUS_DATA_INDEX),
+      (const void*)((request.Buffer) + MODBUS_DATA_INDEX),
       variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
     return handler.WriteHoldingRegisters(
-      MODBUS_CB_WRITE_HOLDING_REGISTERS, first, length);
+      MODBUS_FC_WRITE_MULTIPLE_REGISTERS, first, length);
   default:
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
   }
@@ -807,12 +775,15 @@ template<typename T = MODBUS_TYPE_DEFAULT> void begin(
   const ::gos::atl::modbus::structures::Parameter<T> parameter,
   ::gos::atl::modbus::structures::Variable<T>& variable,
   const MODBUS_TYPE_RATE& rate) {
-  variable.Index.Write = T();
-  variable.Length.Response = T();
+  variable.Index.Write = 0;
+  variable.Length.Request = 0;
+  variable.Length.Response = 0;
   variable.Reading = false;
   variable.Writing = false;
+#ifndef MODBUS_NONE_CONTROL_PIN
   pinMode(parameter.Control, OUTPUT);
   digitalWrite(parameter.Control, LOW);
+#endif
   // disable serial stream timeout and cleans the buffer
   stream.setTimeout(0);
   stream.flush();
@@ -822,7 +793,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> void begin(
     static_cast<T>(5000000 / rate); // 0.5T
   variable.Time.Last = micros() +
     (variable.Time.Half * MODBUS_FULL_SILENCE_MULTIPLIER);
-  variable.Length.Request = T();
+  /* The request buffer length has already been set to zero above */
 }
 
 template<typename T = MODBUS_TYPE_DEFAULT> T loop(
@@ -832,8 +803,10 @@ template<typename T = MODBUS_TYPE_DEFAULT> T loop(
     ::gos::atl::modbus::structures::Variable<T>& variable,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response) {
+
+  // If we are in the writing, let it end first
   if (variable.Writing) {
-    ::gos::atl::modbus::details::write::response<T>(
+    return ::gos::atl::modbus::details::write::response<T>(
       stream,
       parameter,
       variable,
@@ -849,7 +822,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> T loop(
   }
 
   // prepare output buffer
-  ::memset(response.Buffer, 0x00, response.Size);
+  ::gos::atl::buffer::clear(response);
   response.Buffer[MODBUS_ADDRESS_INDEX] =
     request.Buffer[MODBUS_ADDRESS_INDEX];
   response.Buffer[MODBUS_FUNCTION_CODE_INDEX] =
@@ -996,9 +969,7 @@ namespace access {
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_FUNCTION function(
   ::gos::atl::modbus::structures::Variable<T>& variable,
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request) {
-  if (variable.Length.RequestBuffer >= MODBUS_FRAME_SIZE &&
-    !variable.Is.RequestBufferReading)
-  {
+  if (variable.Length.Request >= MODBUS_FRAME_SIZE && !variable.Reading) {
     return request.Buffer[MODBUS_FUNCTION_CODE_INDEX];
   }
   return MODBUS_FC_INVALID;
@@ -1008,12 +979,10 @@ namespace unit {
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_FUNCTION address(
   ::gos::atl::modbus::structures::Variable<T>& variable,
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request) {
-  if (variable.Length.RequestBuffer >= MODBUS_FRAME_SIZE &&
-    !variable.Is.RequestBufferReading)
-  {
+  if (variable.Length.Request  >= MODBUS_FRAME_SIZE && !variable.Reading) {
     return request.Buffer[MODBUS_ADDRESS_INDEX];
   }
-  return MODBUS_FC_INVALID;
+  return MODBUS_INVALID_UNIT_ADDRESS;
 }
 }
 
