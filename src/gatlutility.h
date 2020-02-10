@@ -22,25 +22,17 @@ C read(::gos::atl::buffer::Holder<S, char>& buffer, const S& length) {
 template<typename C = uint16_t, typename I = uint16_t, typename S = uint16_t>
 C calculate(::gos::atl::buffer::Holder<S, char>& buffer, const S& length) {
   I i, j;
-  C crc = 0xFFFF;
-  C tmp;
-
-  // calculate crc
-  for (i = 0; i < length; i++)
-  {
-    crc = crc ^ buffer.Buffer[i];
-
-    for (j = 0; j < 8; j++)
-    {
+  C tmp, crc = 0xFFFF;
+  for (i = 0; i < length; ++i) {
+    crc ^= buffer.Buffer[i];
+    for (j = 0; j < 8; ++j) {
       tmp = crc & 0x0001;
       crc = crc >> 1;
-      if (tmp)
-      {
-        crc = crc ^ 0xA001;
+      if (tmp) {
+        crc ^= 0xA001;
       }
     }
   }
-
   return crc;
 }
 template<typename C = uint16_t, typename I = uint16_t, typename S = uint16_t>
