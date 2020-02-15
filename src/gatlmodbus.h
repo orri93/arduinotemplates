@@ -327,7 +327,7 @@ namespace crc {
 template<typename T = MODBUS_TYPE_DEFAULT> T calculate(
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& buffer, const T& length) {
   uint8_t j;
-  T j;
+  T i;
   T crc = 0xFFFF;
   T tmp;
   // calculate crc
