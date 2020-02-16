@@ -546,7 +546,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool request(
     }
   }
 
-  return variable.Reading && (variable.Length.Request >= MODBUS_FRAME_SIZE);
+  return !variable.Reading && (variable.Length.Request >= MODBUS_FRAME_SIZE);
 }
 } // read namespace
 
