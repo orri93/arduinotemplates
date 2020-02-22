@@ -67,73 +67,69 @@
  *
  */
 
-#define MODBUS_INVALID_UNIT_ADDRESS 255
-#define MODBUS_DEFAULT_UNIT_ADDRESS 1
+#define MODBUS_INVALID_UNIT_ADDRESS                            255
+#define MODBUS_DEFAULT_UNIT_ADDRESS                              1
 
- /**
-  * Modbus function codes
+#define MODBUS_COIL_OFF                                     0x0000
+#define MODBUS_COIL_ON                                      0xff00
+
+/**
+* Modbus function codes
+*/
+#define MODBUS_FC_INVALID                                        0
+#define MODBUS_FC_READ_COILS                                     1
+#define MODBUS_FC_READ_DISCRETE_INPUT                            2
+#define MODBUS_FC_READ_HOLDING_REGISTERS                         3
+#define MODBUS_FC_READ_INPUT_REGISTERS                           4
+#define MODBUS_FC_WRITE_COIL                                     5
+#define MODBUS_FC_WRITE_REGISTER                                 6
+#define MODBUS_FC_READ_EXCEPTION_STATUS                          7
+#define MODBUS_FC_WRITE_MULTIPLE_COILS                          15
+#define MODBUS_FC_WRITE_MULTIPLE_REGISTERS                      16
+
+/**
+  * Modbus status codes
   */
-enum {
-  MODBUS_FC_INVALID = 0,
-  MODBUS_FC_READ_COILS = 1,
-  MODBUS_FC_READ_DISCRETE_INPUT = 2,
-  MODBUS_FC_READ_HOLDING_REGISTERS = 3,
-  MODBUS_FC_READ_INPUT_REGISTERS = 4,
-  MODBUS_FC_WRITE_COIL = 5,
-  MODBUS_FC_WRITE_REGISTER = 6,
-  MODBUS_FC_READ_EXCEPTION_STATUS = 7,
-  MODBUS_FC_WRITE_MULTIPLE_COILS = 15,
-  MODBUS_FC_WRITE_MULTIPLE_REGISTERS = 16
-};
+#define MODBUS_STATUS_OK                                         0
+#define MODBUS_STATUS_ILLEGAL_FUNCTION                           1
+#define MODBUS_STATUS_ILLEGAL_DATA_ADDRESS                       2
+#define MODBUS_STATUS_ILLEGAL_DATA_VALUE                         3
+#define MODBUS_STATUS_SLAVE_DEVICE_FAILURE                       4
+#define MODBUS_STATUS_ACKNOWLEDGE                                5
+#define MODBUS_STATUS_SLAVE_DEVICE_BUSY                          6
+#define MODBUS_STATUS_NEGATIVE_ACKNOWLEDGE                       7 
+#define MODBUS_STATUS_MEMORY_PARITY_ERROR                        8
+#define MODBUS_STATUS_GATEWAY_PATH_UNAVAILABLE                   9
+#define MODBUS_STATUS_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND   10
 
-enum {
-  MODBUS_COIL_OFF = 0x0000,
-  MODBUS_COIL_ON = 0xff00
-};
+#define MODBUS_FRAME_SIZE                                        4
+#define MODBUS_CRC_LENGTH                                        2
 
-enum {
-  MODBUS_STATUS_OK = 0,
-  MODBUS_STATUS_ILLEGAL_FUNCTION,
-  MODBUS_STATUS_ILLEGAL_DATA_ADDRESS,
-  MODBUS_STATUS_ILLEGAL_DATA_VALUE,
-  MODBUS_STATUS_SLAVE_DEVICE_FAILURE,
-  MODBUS_STATUS_ACKNOWLEDGE,
-  MODBUS_STATUS_SLAVE_DEVICE_BUSY,
-  MODBUS_STATUS_NEGATIVE_ACKNOWLEDGE,
-  MODBUS_STATUS_MEMORY_PARITY_ERROR,
-  MODBUS_STATUS_GATEWAY_PATH_UNAVAILABLE,
-  MODBUS_STATUS_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
-};
+#define MODBUS_ADDRESS_INDEX                                     0
+#define MODBUS_FUNCTION_CODE_INDEX                               1
+#define MODBUS_DATA_INDEX                                        2
 
+#define MODBUS_BROADCAST_ADDRESS                                 0
+#define MODBUS_ADDRESS_MIN                                       1
+#define MODBUS_ADDRESS_MAX                                     247
 
-#define MODBUS_FRAME_SIZE 4
-#define MODBUS_CRC_LENGTH 2
-
-#define MODBUS_ADDRESS_INDEX 0
-#define MODBUS_FUNCTION_CODE_INDEX 1
-#define MODBUS_DATA_INDEX 2
-
-#define MODBUS_BROADCAST_ADDRESS 0
-#define MODBUS_ADDRESS_MIN 1
-#define MODBUS_ADDRESS_MAX 247
-
-#define MODBUS_HALF_SILENCE_MULTIPLIER 3
-#define MODBUS_FULL_SILENCE_MULTIPLIER 7
+#define MODBUS_HALF_SILENCE_MULTIPLIER                           3
+#define MODBUS_FULL_SILENCE_MULTIPLIER                           7
 
 #define MODBUS_READ_UINT16(arr, index) word(arr[index], arr[index + 1])
 #define MODBUS_READ_READCRC(arr, length) word(arr[(length - MODBUS_CRC_LENGTH) \
   + 1], arr[length - MODBUS_CRC_LENGTH])
 
-#define MODBUS_TYPE_PIN uint8_t
-#define MODBUS_TYPE_TIME unsigned long
-#define MODBUS_TYPE_RATE unsigned long
-#define MODBUS_TYPE_CODE uint8_t
-#define MODBUS_TYPE_RESULT uint8_t
-#define MODBUS_TYPE_FUNCTION uint8_t
-#define MODBUS_TYPE_BIT_INDEX uint8_t
-#define MODBUS_TYPE_BIND_INDEX uint8_t
-#define MODBUS_TYPE_DEFAULT uint16_t
-#define MODBUS_TYPE_BUFFER uint8_t
+#define MODBUS_TYPE_DEFAULT                               uint16_t
+#define MODBUS_TYPE_TIME                             unsigned long
+#define MODBUS_TYPE_RATE                             unsigned long
+#define MODBUS_TYPE_CODE                                   uint8_t
+#define MODBUS_TYPE_RESULT                                 uint8_t
+#define MODBUS_TYPE_FUNCTION                               uint8_t
+#define MODBUS_TYPE_BIT_INDEX                              uint8_t
+#define MODBUS_TYPE_BIND_INDEX                             uint8_t
+#define MODBUS_TYPE_BUFFER                                 uint8_t
+#define MODBUS_TYPE_PIN                                    uint8_t
 
 namespace gos {
 namespace atl {
@@ -861,56 +857,8 @@ template<typename T = MODBUS_TYPE_DEFAULT> T loop(
 
 
 namespace index {
-namespace access {
-template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
-    ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
-    const T& offset,
-    T& index,
-    MODBUS_TYPE_BIT_INDEX& bitindex) {
-  if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] == MODBUS_FC_WRITE_COIL)
-  {
-    if (offset == 0)
-    {
-      index = MODBUS_DATA_INDEX + 2;
-      // (2 x coilAddress, 1 x value)
-      return MODBUS_FC_WRITE_COIL;
-    }
-  } else if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
-    MODBUS_FC_WRITE_MULTIPLE_COILS) {
-    // (2 x firstCoilAddress, 2 x coilsCount, 1 x valueBytes, n x values)
-    index = MODBUS_DATA_INDEX + 5 + (offset / 8);
-    bitindex = offset % 8;
-
-    return index < variable.Length.Request - MODBUS_CRC_LENGTH;
-  }
-}
-template<typename T = MODBUS_TYPE_DEFAULT> bool registers(
-    ::gos::atl::modbus::structures::Variable<T>& variable,
-    ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
-    const T& offset,
-    T& index) {
-  if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] == MODBUS_FC_WRITE_REGISTER) {
-    if (offset == 0) {
-      index = MODBUS_DATA_INDEX + 2;
-      return true;
-    }
-  } else if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
-    MODBUS_FC_WRITE_MULTIPLE_REGISTERS) {
-    // (2 x firstRegisterAddress, 2 x registersCount, 1 x valueBytes, n x values)
-    index = MODBUS_DATA_INDEX + 5 + (offset * 2);
-
-    // check offset
-    if (index < variable.Length.Request - MODBUS_CRC_LENGTH)
-    {
-      return true;
-    }
-  }
-  return false;
-}
-}
 namespace provide {
-template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT digital(
     ::gos::atl::modbus::structures::Variable<T>& variable,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
@@ -930,8 +878,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
   bitindex = offset % 8;
 
   // check offset
-  if (index >= variable.Length.Response - MODBUS_CRC_LENGTH)
-  {
+  if (index >= variable.Length.Response - MODBUS_CRC_LENGTH) {
     return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
   }
 
@@ -954,8 +901,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
   index = MODBUS_DATA_INDEX + 1 + (offset * 2);
 
   // check offset
-  if ((index + 2) > (variable.Length.Response - MODBUS_CRC_LENGTH))
-  {
+  if ((index + 2) > (variable.Length.Response - MODBUS_CRC_LENGTH)) {
     return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
   }
 
@@ -976,7 +922,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_FUNCTION function(
 }
 
 namespace unit {
-template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_FUNCTION address(
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT address(
   ::gos::atl::modbus::structures::Variable<T>& variable,
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request) {
   if (variable.Length.Request  >= MODBUS_FRAME_SIZE && !variable.Reading) {
@@ -995,34 +941,54 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool is(
 }
 }
 
+/* readCoilFromBuffer probably has bug for Write (single) Coil */
 template<typename T = MODBUS_TYPE_DEFAULT> bool coil(
   ::gos::atl::modbus::structures::Variable<T>& variable,
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
   const T& offset) {
-  T index;
-  MODBUS_TYPE_BIT_INDEX bindex;
-  if (::gos::atl::modbus::index::access::coil<T>(
-    variable, request, offset, index, bindex) == MODBUS_STATUS_OK) {
-    return bitRead(request.Buffer[index], bindex);
-  } else {
-    return false;
+  if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] == MODBUS_FC_WRITE_COIL) {
+    if (offset == 0) {
+      // (2 x coilAddress, 1 x value)
+      return MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2) ==
+        MODBUS_COIL_ON;
+    } else {
+      return false;
+    }
+  } else if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
+    MODBUS_FC_WRITE_MULTIPLE_COILS) {
+    // (2 x firstCoilAddress, 2 x coilsCount, 1 x valueBytes, n x values)
+    T index = MODBUS_DATA_INDEX + 5 + (offset / 8);
+    MODBUS_TYPE_BIT_INDEX bitindex = offset % 8;
+    // check offset
+    if (index < variable.Length.Request - MODBUS_CRC_LENGTH) {
+      return bitRead(request.Buffer[index], bitindex);
+    }
   }
+  return false;
 }
 
+/* readRegisterFromBuffer probably has bug for Write (single) Register */
 template<typename T = MODBUS_TYPE_DEFAULT> T registers(
     ::gos::atl::modbus::structures::Variable<T>& variable,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     const T& offset) {
-  T index;
-  if (::gos::atl::modbus::index::access::registers<T>(
-    variable, request, offset, index) == MODBUS_STATUS_OK) {
-    return MODBUS_READ_UINT16(request.Buffer, index);
-  } else {
-    return 0;
+  if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] == MODBUS_FC_WRITE_REGISTER) {
+    if (offset == 0) {
+      // (2 x coilAddress, 2 x value)
+      return MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2);
+    }
+  } else if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
+    MODBUS_FC_WRITE_MULTIPLE_REGISTERS) {
+    // (2 x firstRegisterAddress, 2 x registersCount, 1 x valueBytes, n x values)
+    T index = MODBUS_DATA_INDEX + 5 + (offset * 2);
+    // check offset
+    if (index < variable.Length.Request - MODBUS_CRC_LENGTH) {
+      return MODBUS_READ_UINT16(request.Buffer, index);
+    }
   }
+  return 0;
 }
 } // access namespace
-
 
 namespace provide {
 
@@ -1043,8 +1009,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT mexception(
   T bitindex = offset % 8;
 
   // check offset
-  if (index >= variable.Length.Response - MODBUS_CRC_LENGTH)
-  {
+  if (index >= variable.Length.Response - MODBUS_CRC_LENGTH) {
     return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
   }
 
@@ -1065,7 +1030,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT coil(
     const bool& status) {
   T index;
   MODBUS_TYPE_BIT_INDEX bitindex;
-  MODBUS_TYPE_RESULT result = ::gos::atl::modbus::index::provide::coil<T>(
+  MODBUS_TYPE_RESULT result = ::gos::atl::modbus::index::provide::digital<T>(
     variable, request, response, offset, index, bitindex);
   if (result == MODBUS_STATUS_OK) {
     if (status) {
@@ -1092,27 +1057,16 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
     const T& offset,
     const T& value) {
-  // check function code
-  if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] !=
-    MODBUS_FC_READ_HOLDING_REGISTERS &&
-    request.Buffer[MODBUS_FUNCTION_CODE_INDEX] !=
-    MODBUS_FC_READ_INPUT_REGISTERS) {
-    return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
+  T index;
+  MODBUS_TYPE_RESULT result = ::gos::atl::modbus::index::provide::registers<T>(
+    variable, request, offset, index);
+
+  if (result == MODBUS_STATUS_OK) {
+    response.Buffer[index] = value >> 8;
+    response.Buffer[index + 1] = value & 0xff;
   }
 
-  // (1 x valueBytes, n x values)
-  T index = MODBUS_DATA_INDEX + 1 + (offset * 2);
-
-  // check offset
-  if ((index + 2) > (variable.Length.Response - MODBUS_CRC_LENGTH))
-  {
-    return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
-  }
-
-  response.Buffer[index] = value >> 8;
-  response.Buffer[index + 1] = value & 0xff;
-
-  return MODBUS_STATUS_OK;
+  return result;
 }
 
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT string(
@@ -1125,8 +1079,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT string(
   T index = MODBUS_DATA_INDEX + 1 + (offset * 2);
 
   // check string length.
-  if ((index + length) > (variable.Length.Response - MODBUS_CRC_LENGTH))
-  {
+  if ((index + length) > (variable.Length.Response - MODBUS_CRC_LENGTH)) {
     return MODBUS_STATUS_ILLEGAL_DATA_ADDRESS;
   }
 
