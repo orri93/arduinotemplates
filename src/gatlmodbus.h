@@ -243,7 +243,8 @@ result initialize(
 } // detail namespace
 } // binding namespace
 
-template<typename T = MODBUS_TYPE_DEFAULT> class Handler {
+#ifdef MODBUS_HANDLER_INTERFACE
+template<typename T = MODBUS_TYPE_DEFAULT > class Handler {
 public:
   virtual ~Handler() {}
   virtual MODBUS_TYPE_RESULT ReadCoils(
@@ -282,6 +283,85 @@ public:
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
   }
 };
+#else
+namespace callback {
+typedef MODBUS_TYPE_RESULT(*read)(
+  const MODBUS_TYPE_DEFAULT& address,
+  const MODBUS_TYPE_DEFAULT& length);
+typedef MODBUS_TYPE_RESULT(*write)(
+  const MODBUS_TYPE_FUNCTION& function,
+  const MODBUS_TYPE_DEFAULT& address,
+  const MODBUS_TYPE_DEFAULT& length);
+typedef MODBUS_TYPE_RESULT(*status)();
+namespace detail {
+namespace read {
+static ::gos::atl::modbus::callback::read _coils = nullptr;
+namespace discrete {
+static ::gos::atl::modbus::callback::read _inputs = nullptr;
+}
+namespace holding {
+static ::gos::atl::modbus::callback::read _registers = nullptr;
+}
+namespace input {
+static ::gos::atl::modbus::callback::read _registers = nullptr;
+}
+namespace exception {
+static ::gos::atl::modbus::callback::status _status = nullptr;
+}
+}
+namespace write {
+static ::gos::atl::modbus::callback::write _coils = nullptr;
+namespace holding {
+static ::gos::atl::modbus::callback::write _registers = nullptr;
+}
+}
+}
+namespace set {
+namespace read {
+template<typename T = MODBUS_TYPE_DEFAULT> void coils(
+  const ::gos::atl::modbus::callback::read& function) {
+  ::gos::atl::modbus::callback::detail::read::_coils = function;
+}
+namespace discrete {
+template<typename T = MODBUS_TYPE_DEFAULT> void inputs(
+  const ::gos::atl::modbus::callback::read& function) {
+  ::gos::atl::modbus::callback::detail::read::discrete::_inputs = function;
+}
+}
+namespace holding {
+template<typename T = MODBUS_TYPE_DEFAULT> void registers(
+  const ::gos::atl::modbus::callback::read& function) {
+  ::gos::atl::modbus::callback::detail::read::holding::_registers = function;
+}
+}
+namespace input {
+template<typename T = MODBUS_TYPE_DEFAULT> void registers(
+  const ::gos::atl::modbus::callback::read& function) {
+  ::gos::atl::modbus::callback::detail::read::input::_registers = function;
+}
+}
+namespace exception {
+template<typename T = MODBUS_TYPE_DEFAULT> void status(
+  const ::gos::atl::modbus::callback::status& function) {
+  ::gos::atl::modbus::callback::detail::read::exception::_status = function;
+}
+}
+}
+namespace write {
+template<typename T = MODBUS_TYPE_DEFAULT> void coils(
+  const ::gos::atl::modbus::callback::write& function) {
+  ::gos::atl::modbus::callback::detail::write::_coils = function;
+}
+namespace holding {
+template<typename T = MODBUS_TYPE_DEFAULT> void registers(
+  const ::gos::atl::modbus::callback::write& function) {
+  ::gos::atl::modbus::callback::detail::write::holding::_registers = function;
+}
+}
+}
+}
+}
+#endif
 
 namespace structures {
 template<typename T = MODBUS_TYPE_DEFAULT> struct Parameter {
@@ -648,7 +728,9 @@ template<typename T = MODBUS_TYPE_DEFAULT> bool request(
 
 namespace create {
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
+#ifdef MODBUS_HANDLER_INTERFACE
     ::gos::atl::modbus::Handler<T>& handler,
+#endif
     ::gos::atl::modbus::structures::Variable<T>& variable,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response) {
@@ -665,7 +747,15 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
     variable.Length.Response += 1;
 
     // execute callback and return the status code
+#ifdef MODBUS_HANDLER_INTERFACE
     return handler.ReadExceptionStatus();
+#else
+    if (::gos::atl::modbus::callback::detail::read::exception::_status) {
+      return ::gos::atl::modbus::callback::detail::read::exception::_status();
+    } else {
+      return MODBUS_STATUS_ILLEGAL_FUNCTION;
+    }
+#endif
   case MODBUS_FC_READ_COILS:          // read coils (digital out state)
   case MODBUS_FC_READ_DISCRETE_INPUT: // read input state (digital in)
     // read the the first input address and the number of inputs
@@ -677,11 +767,31 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
     variable.Length.Response += 1 + (response.Buffer[MODBUS_DATA_INDEX]);
 
     // execute callback and return the status code
+#ifdef MODBUS_HANDLER_INTERFACE
     if (function == MODBUS_FC_READ_COILS) {
       return handler.ReadCoils(first, length);
     } else {
       return handler.ReadDiscreteInputs(first, length);
     }
+#else
+    if (function == MODBUS_FC_READ_COILS) {
+      if (::gos::atl::modbus::callback::detail::read::_coils) {
+        return ::gos::atl::modbus::callback::detail::read::_coils(
+          first,
+          length);
+      } else {
+        return MODBUS_STATUS_ILLEGAL_FUNCTION;
+      }
+    } else {
+      if (::gos::atl::modbus::callback::detail::read::discrete::_inputs) {
+        return ::gos::atl::modbus::callback::detail::read::discrete::_inputs(
+          first,
+          length);
+      } else {
+        return MODBUS_STATUS_ILLEGAL_FUNCTION;
+      }
+    }
+#endif
   case MODBUS_FC_READ_HOLDING_REGISTERS: // read holding registers
   case MODBUS_FC_READ_INPUT_REGISTERS:   // read input registers
     // read the starting address and the number of inputs
@@ -693,11 +803,32 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
     variable.Length.Response += 1 + (response.Buffer[MODBUS_DATA_INDEX]);
 
     // execute callback and return the status code
+#ifdef MODBUS_HANDLER_INTERFACE
     if (function == MODBUS_FC_READ_HOLDING_REGISTERS) {
       return handler.ReadHoldingRegisters(first, length);
     } else {
       return handler.ReadInputRegisters(first, length);
     }
+#else
+    if (function == MODBUS_FC_READ_HOLDING_REGISTERS) {
+      if (::gos::atl::modbus::callback::detail::read::holding::_registers) {
+        return ::gos::atl::modbus::callback::detail::read::holding::_registers(
+          first,
+          length);
+      } else {
+        return MODBUS_STATUS_ILLEGAL_FUNCTION;
+      }
+    } else {
+      if (::gos::atl::modbus::callback::detail::read::input::_registers) {
+        return ::gos::atl::modbus::callback::detail::read::input::_registers(
+          first,
+          length);
+      } else {
+        return MODBUS_STATUS_ILLEGAL_FUNCTION;
+      }
+    }
+
+#endif
   case MODBUS_FC_WRITE_COIL: // write one coil (digital out)
     // read the address
     first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
@@ -711,7 +842,18 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
       variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
+#ifdef MODBUS_HANDLER_INTERFACE
     return handler.WriteCoils(MODBUS_FC_WRITE_COIL, first, 1);
+#else
+    if (::gos::atl::modbus::callback::detail::write::_coils) {
+      return ::gos::atl::modbus::callback::detail::write::_coils(
+        MODBUS_FC_WRITE_COIL,
+        first,
+        1);
+    } else {
+      return MODBUS_STATUS_ILLEGAL_FUNCTION;
+    }
+#endif
   case MODBUS_FC_WRITE_REGISTER:
     // read the address
     first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
@@ -725,7 +867,18 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
       variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
+#ifdef MODBUS_HANDLER_INTERFACE
     return handler.WriteHoldingRegisters(MODBUS_FC_WRITE_REGISTER, first, 1);
+#else
+    if (::gos::atl::modbus::callback::detail::write::holding::_registers) {
+      return ::gos::atl::modbus::callback::detail::write::holding::_registers(
+        MODBUS_FC_WRITE_REGISTER,
+        first,
+        1);
+    } else {
+      return MODBUS_STATUS_ILLEGAL_FUNCTION;
+    }
+#endif
   case MODBUS_FC_WRITE_MULTIPLE_COILS: // write coils (digital out)
     // read the starting address and the number of outputs
     first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
@@ -740,7 +893,18 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
       variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
+#ifdef MODBUS_HANDLER_INTERFACE
     return handler.WriteCoils(MODBUS_FC_WRITE_MULTIPLE_COILS, first, length);
+#else
+    if (::gos::atl::modbus::callback::detail::write::_coils) {
+      return ::gos::atl::modbus::callback::detail::write::_coils(
+        MODBUS_FC_WRITE_COIL,
+        first,
+        length);
+    } else {
+      return MODBUS_STATUS_ILLEGAL_FUNCTION;
+    }
+#endif
   case MODBUS_FC_WRITE_MULTIPLE_REGISTERS: // write holding registers
     // read the starting address and the number of outputs
     first = MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX);
@@ -755,8 +919,19 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT response(
       variable.Length.Response - MODBUS_FRAME_SIZE);
 
     // execute callback and return the status code
+#ifdef MODBUS_HANDLER_INTERFACE
     return handler.WriteHoldingRegisters(
       MODBUS_FC_WRITE_MULTIPLE_REGISTERS, first, length);
+#else
+    if (::gos::atl::modbus::callback::detail::write::holding::_registers) {
+      return ::gos::atl::modbus::callback::detail::write::holding::_registers(
+        MODBUS_FC_WRITE_REGISTER,
+        first,
+        length);
+    } else {
+      return MODBUS_STATUS_ILLEGAL_FUNCTION;
+    }
+#endif
   default:
     return MODBUS_STATUS_ILLEGAL_FUNCTION;
   }
@@ -784,7 +959,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> void begin(
   stream.setTimeout(0);
   stream.flush();
   variable.Length.Transmission = stream.availableForWrite();
-  // calculate half char time time from the serial's baudrate
+  // calculate half char time from the serial's baud-rate
   variable.Time.Half = rate > 19200 ? 250 :
     static_cast<T>(5000000 / rate); // 0.5T
   variable.Time.Last = micros() +
@@ -795,7 +970,9 @@ template<typename T = MODBUS_TYPE_DEFAULT> void begin(
 template<typename T = MODBUS_TYPE_DEFAULT> T loop(
     Stream& stream,
     const ::gos::atl::modbus::structures::Parameter<T> parameter,
+#ifdef MODBUS_HANDLER_INTERFACE
     ::gos::atl::modbus::Handler<T>& handler,
+#endif
     ::gos::atl::modbus::structures::Variable<T>& variable,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response) {
@@ -836,8 +1013,13 @@ template<typename T = MODBUS_TYPE_DEFAULT> T loop(
   }
 
   // execute request and fill the response
+#ifdef MODBUS_HANDLER_INTERFACE
   MODBUS_TYPE_RESULT status = ::gos::atl::modbus::details::create::response<T>(
       handler, variable, request, response);
+#else
+  MODBUS_TYPE_RESULT status = ::gos::atl::modbus::details::create::response<T>(
+    variable, request, response);
+#endif
 
   // check if the callback execution failed
   if (status != MODBUS_STATUS_OK) {
