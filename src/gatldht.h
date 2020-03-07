@@ -3,20 +3,24 @@
 
 #include <Arduino.h>
 
-#define GATL_DHT_SUCCESS     0x00
-#define GATL_DHT_TIMEOUT     0x01
-#define GATL_DHT_CHECKSUM    0x02
+#define GATL_DHT_SUCCESS            0x00
+#define GATL_DHT_TIMEOUT            0x01
+#define GATL_DHT_CHECKSUM           0x02
 
 /* data sheet says "at least 1 ms" */
-#define GATL_DHT_DELAY_GENERAL 1100
-#define GATL_DHT_DELAY_DHT11   20000
+#define GATL_DHT_DELAY_GENERAL      1100
+#define GATL_DHT_DELAY_DHT11       20000
 
-#define GATL_DHT_DEFAULT_PIN_TYPE uint8_t
-#define GATL_DHT_DEFAULT_RAW_TYPE uint16_t
-#define GATL_DHT_DEFAULT_VALUE_TYPE float
-#define GATL_DHT_DEFAULT_DELAY_TYPE uint16_t
-#define GATL_DHT_DEFAULT_RESAULT_TYPE uint8_t
-#define GATL_DHT_DEFAULT_TIMER_TYPE unsigned long
+#define GATL_DHT_INTERVAL_GENERAL   2000
+#define GATL_DHT_INTERVAL_DHT11     1000
+
+#define        GATL_DHT_DEFAULT_PIN_TYPE uint8_t
+#define        GATL_DHT_DEFAULT_RAW_TYPE uint16_t
+#define GATL_DHT_DEFAULT_VALUE_REAL_TYPE float
+#define  GATL_DHT_DEFAULT_VALUE_INT_TYPE int32_t
+#define      GATL_DHT_DEFAULT_DELAY_TYPE uint16_t
+#define    GATL_DHT_DEFAULT_RESAULT_TYPE uint8_t
+#define      GATL_DHT_DEFAULT_TIMER_TYPE unsigned long
 
 namespace gos {
 namespace atl {
@@ -109,8 +113,9 @@ template <typename R = GATL_DHT_DEFAULT_RAW_TYPE>
 }
 
 namespace convert {
+namespace real {
 template <
-  typename V = GATL_DHT_DEFAULT_VALUE_TYPE,
+  typename V = GATL_DHT_DEFAULT_VALUE_REAL_TYPE,
   typename R = GATL_DHT_DEFAULT_RAW_TYPE>
   void general(struct Values<V>& values, const struct Values<R>& raw) {
   values.humidity = raw.humidity * 0.1;
@@ -119,13 +124,31 @@ template <
     ((V)((int16_t)(raw.temperature)) * 0.1);
 }
 template <
-  typename V = GATL_DHT_DEFAULT_VALUE_TYPE,
+  typename V = GATL_DHT_DEFAULT_VALUE_REAL_TYPE,
   typename R = GATL_DHT_DEFAULT_RAW_TYPE>
   void dht11(struct Values<V>& values, const struct Values<R>& raw) {
   values.humidity = raw.humidity >> 8;
   values.temperature = raw.temperature >> 8;
 }
-
+} // namespace real
+namespace integer {
+template <
+  typename V = GATL_DHT_DEFAULT_VALUE_INT_TYPE,
+  typename R = GATL_DHT_DEFAULT_RAW_TYPE>
+  void general(struct Values<V>& values, const struct Values<R>& raw) {
+  values.humidity = raw.humidity * 0.1;
+  values.temperature = raw.temperature & 0x8000 ?
+    (V)(-(int16_t)(raw.temperature & 0x7FFF)) :
+    (V)((int16_t)(raw.temperature));
+}
+template <
+  typename V = GATL_DHT_DEFAULT_VALUE_INT_TYPE,
+  typename R = GATL_DHT_DEFAULT_RAW_TYPE>
+  void dht11(struct Values<V>& values, const struct Values<R>& raw) {
+  values.humidity = raw.humidity >> 8;
+  values.temperature = raw.temperature >> 8;
+}
+} // namespace real
 } // namespace convert
 
 } // namespace dht
