@@ -91,6 +91,14 @@ namespace range {
 
 template<typename T> bool isinside(
   const T& value,
+  const T& size,
+  const T& first,
+  const T& length) {
+  return value >= first && value + size <= first + length;
+}
+
+template<typename T> bool isinside(
+  const T& value,
   const T& lowest,
   const T& highest) {
   return value >= lowest && value <= highest;
@@ -126,6 +134,14 @@ template<typename T> bool isoneinside(
   return false;
 }
 #endif
+
+template<typename T> bool ismemberof(
+  const T& value,
+  const T& size,
+  const T& first,
+  const T& length) {
+  return value >= first && value + size < first + length;
+}
 
 template<typename T> bool ismemberof(
   const T& value,
