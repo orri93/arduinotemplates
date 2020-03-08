@@ -40,12 +40,6 @@ struct Variable {
   V OutputSum;
 };
 
-template<typename V>
-struct Values {
-  bool Mode;
-  V Manual;
-};
-
 namespace time {
 namespace milliseconds {
 template<typename T> T Ki(const T& gain, const T& ti) {
