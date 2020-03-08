@@ -5,6 +5,8 @@
 
 #include <gatlbuffer.h>
 
+#define GATL_TEXT_MEMCPY(d,x) memcpy(d, x, sizeof(x)) 
+
 namespace gos {
 namespace atl {
 
