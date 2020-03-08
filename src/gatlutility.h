@@ -89,12 +89,13 @@ bool is(const T& value, const ::gos::atl::type::optional<T>& optional) {
 
 namespace range {
 
+namespace inclusive {
 template<typename T> bool isinside(
   const T& value,
   const T& size,
-  const T& first,
-  const T& length) {
-  return value >= first && value + size <= first + length;
+  const T& lowest,
+  const T& highest) {
+  return value >= lowest && value + size <= highest;
 }
 
 template<typename T> bool isinside(
@@ -102,6 +103,125 @@ template<typename T> bool isinside(
   const T& lowest,
   const T& highest) {
   return value >= lowest && value <= highest;
+}
+
+template<typename T> bool isinside(
+  const T& value,
+  ::gos::atl::type::range<T>& range) {
+  return isinside(value, range.lowest, range.highest);
+}
+
+#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_UTILITY_VECTOR_SUPPORT
+template<typename T> bool isoneinside(
+  std::vector<T>& values,
+  const T& lowest,
+  const T& highest) {
+  for (std::vector<T>::iterator it = values.begin(); it != values.end(); it++) {
+    if (isinside(*it, lowest, highest)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template<typename T> bool isoneinside(
+  std::vector<T>& values,
+  ::gos::atl::type::range<T>& range) {
+  for (std::vector<T>::iterator it = values.begin(); it != values.end(); it++) {
+    if (isinside(*it, range)) {
+      return true;
+    }
+  }
+  return false;
+}
+#endif
+
+template<typename T> bool ismemberof(
+  const T& value,
+  const T& size,
+  const T& first,
+  const T& length) {
+  return value >= first && value + size <= first + length;
+}
+
+template<typename T> bool ismemberof(
+  const T& value,
+  const T& first,
+  const T& length) {
+  return value >= first && value <= first + length;
+}
+
+template<typename T> bool ismemberof(
+  const T& value,
+  ::gos::atl::type::range<T>& range) {
+  return ismemberof(value, range.lowest, range.highest);
+}
+
+template<typename T, typename I> bool isonememberof(
+  const T* values,
+  const I& count,
+  const T& first,
+  const T& length) {
+  for (I i = 0; i < count; i++) {
+    if (ismemberof(values[i], first, length)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template<typename T, typename I> bool isonememberof(
+  const T* values,
+  const I& count,
+  ::gos::atl::type::range<T>& range) {
+  for (I i = 0; i < count; i++) {
+    if (ismemberof(values[i], range)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+#ifdef GOS_ARDUINO_TEMPLATE_LIBRARY_UTILITY_VECTOR_SUPPORT
+template<typename T> bool isonememberof(
+  const std::vector<T>& values,
+  const T& first,
+  const T& length) {
+  for (std::vector<T>::iterator it = values.begin(); it != values.end(); it++) {
+    if (ismemberof(*it, first, length)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template<typename T> bool isonememberof(
+  const std::vector<T>& values,
+  ::gos::atl::type::range<T>& range) {
+  for (std::vector<T>::iterator it = values.begin(); it != values.end(); it++) {
+    if (ismemberof(*it, range)) {
+      return true;
+    }
+  }
+  return false;
+}
+#endif
+}
+
+namespace exclusive {
+template<typename T> bool isinside(
+  const T& value,
+  const T& size,
+  const T& lowest,
+  const T& highest) {
+  return value >= lowest && value + size < highest;
+}
+
+template<typename T> bool isinside(
+  const T& value,
+  const T& lowest,
+  const T& highest) {
+  return value >= lowest && value < highest;
 }
 
 template<typename T> bool isinside(
@@ -165,7 +285,7 @@ template<typename T, typename I> bool isonememberof(
     if (ismemberof(values[i], first, length)) {
       return true;
     }
-  }
+}
   return false;
 }
 
@@ -205,12 +325,13 @@ template<typename T> bool isonememberof(
   return false;
 }
 #endif
+}
 
 template<typename T> T restrict(
   const T& value,
   const T& minimum,
   const T& maximum){
-  if (isinside(value, minimum, maximum)) {
+  if (inclusive::isinside(value, minimum, maximum)) {
     return value;
   }
  else if (value > maximum) {
