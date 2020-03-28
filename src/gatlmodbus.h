@@ -122,6 +122,7 @@
   + 1], arr[length - MODBUS_CRC_LENGTH])
 
 #define MODBUS_TYPE_DEFAULT                               uint16_t
+#define MODBUS_TYPE_LOCATION                               int32_t
 #define MODBUS_TYPE_TIME                             unsigned long
 #define MODBUS_TYPE_RATE                             unsigned long
 #define MODBUS_TYPE_CODE                                   uint8_t
@@ -1142,7 +1143,7 @@ namespace buffer {
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
   ::gos::atl::modbus::structures::Variable<T>& variable,
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
-  MODBUS_TYPE_DEFAULT location,
+  MODBUS_TYPE_LOCATION location,
   const MODBUS_TYPE_DEFAULT& address) {
   if ((location -= address) >= 0) {
     T index = ::gos::atl::modbus::index::access::registers(
