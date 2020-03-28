@@ -1117,22 +1117,6 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
   return MODBUS_STATUS_OK;
 }
 
-namespace buffer {
-template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
-  ::gos::atl::modbus::structures::Variable<T>& variable,
-  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
-  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
-  MODBUS_TYPE_LOCATION location,
-  const MODBUS_TYPE_DEFAULT& address) {
-  if ((location -= address) >= 0) {
-    T index = ::gos::atl::modbus::index::provide::registers(
-      variable, request, response, static_cast<MODBUS_TYPE_DEFAULT>(location));
-    return response.Buffer + index;
-  }
-  return nullptr;
-}
-} // buffer namespace
-
 } // provide namespace
 } // index namespace
 
@@ -1165,8 +1149,8 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
   MODBUS_TYPE_LOCATION location,
   const MODBUS_TYPE_DEFAULT& address) {
   if ((location -= address) >= 0) {
-    T index = ::gos::atl::modbus::index::access::registers(
-      variable, request, static_cast<MODBUS_TYPE_DEFAULT>(location));
+    T index = ::gos::atl::modbus::index::access::registers<T>(
+      variable, request, static_cast<T>(location));
     return request.Buffer + index;
   }
   return nullptr;
@@ -1179,9 +1163,10 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
   const MODBUS_TYPE_DEFAULT& size,
   const MODBUS_TYPE_DEFAULT& address,
   const MODBUS_TYPE_DEFAULT& length) {
-  if (location - address >= 0 && location + size <= address + length) {
-    T index = ::gos::atl::modbus::index::access::registers(
+  if ((location - address) >= 0 && location + size <= address + length) {
+    T index = ::gos::atl::modbus::index::access::registers<T>(
       variable, request, location - address);
+    return request.Buffer + index;
   }
   return nullptr;
 }
@@ -1227,7 +1212,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> T registers(
     ::gos::atl::modbus::structures::Variable<T>& variable,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     const T& offset) {
-  T index = ::gos::atl::modbus::index::access::registers(
+  T index = ::gos::atl::modbus::index::access::registers<T>(
     variable, request, offset);
   if (index) {
     return MODBUS_READ_UINT16(request.Buffer, index);
@@ -1238,6 +1223,44 @@ template<typename T = MODBUS_TYPE_DEFAULT> T registers(
 } // access namespace
 
 namespace provide {
+
+namespace buffer {
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
+  MODBUS_TYPE_LOCATION location,
+  const MODBUS_TYPE_DEFAULT& address) {
+  if ((location -= address) >= 0) {
+    T index;
+    MODBUS_TYPE_RESULT res = ::gos::atl::modbus::index::provide::registers<T>(
+      variable, request, static_cast<T>(location), index);
+    if (res == MODBUS_STATUS_OK) {
+      return response.Buffer + index;
+    }
+  }
+  return nullptr;
+}
+
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
+  MODBUS_TYPE_DEFAULT location,
+  const MODBUS_TYPE_DEFAULT& size,
+  const MODBUS_TYPE_DEFAULT& address,
+  const MODBUS_TYPE_DEFAULT& length) {
+  if ((location - address) >= 0 && location + size <= address + length) {
+    T index;
+    MODBUS_TYPE_RESULT res = ::gos::atl::modbus::index::provide::registers<T>(
+      variable, request, static_cast<T>(location - address), index);
+    if (res == MODBUS_STATUS_OK) {
+      return response.Buffer + index;
+    }
+  }
+  return nullptr;
+}
+} // buffer namespace
 
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT mexception(
     ::gos::atl::modbus::structures::Variable<T>& variable,
