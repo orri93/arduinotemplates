@@ -1147,7 +1147,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
   if ((location -= address) >= 0) {
     T index = ::gos::atl::modbus::index::access::registers(
       variable, request, location);
-    return request.Buffer[index];
+    return request.Buffer + index;
   }
   return nullptr;
 }
