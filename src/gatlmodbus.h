@@ -116,6 +116,7 @@
 #define MODBUS_HALF_SILENCE_MULTIPLIER                           3
 #define MODBUS_FULL_SILENCE_MULTIPLIER                           7
 
+#define MODBUS_READ_UINT16_AT0(arr) word(*arr, *(arr + 1))
 #define MODBUS_READ_UINT16(arr, index) word(arr[index], arr[index + 1])
 #define MODBUS_READ_READCRC(arr, length) word(arr[(length - MODBUS_CRC_LENGTH) \
   + 1], arr[length - MODBUS_CRC_LENGTH])
@@ -1039,6 +1040,29 @@ template<typename T = MODBUS_TYPE_DEFAULT> T loop(
 
 
 namespace index {
+namespace access {
+/* readRegisterFromBuffer probably has bug for Write (single) Register */
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  const T& offset) {
+  if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] == MODBUS_FC_WRITE_REGISTER) {
+    if (offset == 0) {
+      // (2 x coilAddress, 2 x value)
+      return MODBUS_DATA_INDEX + 2;
+    }
+  } else if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
+    MODBUS_FC_WRITE_MULTIPLE_REGISTERS) {
+    // (2 x firstRegisterAddress, 2 x registersCount, 1 x valueBytes, n x values)
+    T index = MODBUS_DATA_INDEX + 5 + (offset * 2);
+    // check offset
+    if (index < variable.Length.Request - MODBUS_CRC_LENGTH) {
+      return index;
+    }
+  }
+  return 0;
+}
+}
 namespace provide {
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT digital(
     ::gos::atl::modbus::structures::Variable<T>& variable,
@@ -1089,7 +1113,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
 
   return MODBUS_STATUS_OK;
 }
-} // access namespace
+} // provide namespace
 } // index namespace
 
 
@@ -1111,6 +1135,35 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT address(
     return request.Buffer[MODBUS_ADDRESS_INDEX];
   }
   return MODBUS_INVALID_UNIT_ADDRESS;
+}
+}
+
+namespace buffer {
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  MODBUS_TYPE_DEFAULT location,
+  const MODBUS_TYPE_DEFAULT& address) {
+  if ((location -= address) >= 0) {
+    T index = ::gos::atl::modbus::index::access::registers(
+      variable, request, location);
+    return request.Buffer[index];
+  }
+  return nullptr;
+}
+
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  MODBUS_TYPE_DEFAULT location,
+  const MODBUS_TYPE_DEFAULT& size,
+  const MODBUS_TYPE_DEFAULT& address,
+  const MODBUS_TYPE_DEFAULT& length) {
+  if (location - address >= 0 && location + size <= address + length) {
+    T index = ::gos::atl::modbus::index::access::registers(
+      variable, request, location - address);
+  }
+  return nullptr;
 }
 }
 
@@ -1154,21 +1207,13 @@ template<typename T = MODBUS_TYPE_DEFAULT> T registers(
     ::gos::atl::modbus::structures::Variable<T>& variable,
     ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
     const T& offset) {
-  if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] == MODBUS_FC_WRITE_REGISTER) {
-    if (offset == 0) {
-      // (2 x coilAddress, 2 x value)
-      return MODBUS_READ_UINT16(request.Buffer, MODBUS_DATA_INDEX + 2);
-    }
-  } else if (request.Buffer[MODBUS_FUNCTION_CODE_INDEX] ==
-    MODBUS_FC_WRITE_MULTIPLE_REGISTERS) {
-    // (2 x firstRegisterAddress, 2 x registersCount, 1 x valueBytes, n x values)
-    T index = MODBUS_DATA_INDEX + 5 + (offset * 2);
-    // check offset
-    if (index < variable.Length.Request - MODBUS_CRC_LENGTH) {
-      return MODBUS_READ_UINT16(request.Buffer, index);
-    }
+  T index = ::gos::atl::modbus::index::access::registers(
+    variable, request, offset);
+  if (index) {
+    return MODBUS_READ_UINT16(request.Buffer, index);
+  } else {
+    return 0;
   }
-  return 0;
 }
 } // access namespace
 
