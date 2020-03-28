@@ -120,6 +120,8 @@
 #define MODBUS_READ_UINT16(arr, index) word(arr[index], arr[index + 1])
 #define MODBUS_READ_READCRC(arr, length) word(arr[(length - MODBUS_CRC_LENGTH) \
   + 1], arr[length - MODBUS_CRC_LENGTH])
+#define MODBUS_WRITE_UINT16_AT0(arr,val) *arr = highByte(val); \
+  *(arr + 1) = lowByte(val)
 
 #define MODBUS_TYPE_DEFAULT                               uint16_t
 #define MODBUS_TYPE_LOCATION                               int32_t
@@ -1114,6 +1116,23 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_RESULT registers(
 
   return MODBUS_STATUS_OK;
 }
+
+namespace buffer {
+template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
+  ::gos::atl::modbus::structures::Variable<T>& variable,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
+  ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
+  MODBUS_TYPE_LOCATION location,
+  const MODBUS_TYPE_DEFAULT& address) {
+  if ((location -= address) >= 0) {
+    T index = ::gos::atl::modbus::index::provide::registers(
+      variable, request, response, static_cast<MODBUS_TYPE_DEFAULT>(location));
+    return response.Buffer + index;
+  }
+  return nullptr;
+}
+} // buffer namespace
+
 } // provide namespace
 } // index namespace
 
@@ -1147,7 +1166,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
   const MODBUS_TYPE_DEFAULT& address) {
   if ((location -= address) >= 0) {
     T index = ::gos::atl::modbus::index::access::registers(
-      variable, request, location);
+      variable, request, static_cast<MODBUS_TYPE_DEFAULT>(location));
     return request.Buffer + index;
   }
   return nullptr;
