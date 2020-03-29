@@ -1161,7 +1161,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
 template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
   ::gos::atl::modbus::structures::Variable<T>& variable,
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
-  MODBUS_TYPE_DEFAULT location,
+  MODBUS_TYPE_LOCATION location,
   const MODBUS_TYPE_DEFAULT& size,
   const MODBUS_TYPE_DEFAULT& address,
   const MODBUS_TYPE_DEFAULT& length) {
@@ -1250,7 +1250,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
   ::gos::atl::modbus::structures::Variable<T>& variable,
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& request,
   ::gos::atl::buffer::Holder<T, MODBUS_TYPE_BUFFER>& response,
-  MODBUS_TYPE_DEFAULT location,
+  MODBUS_TYPE_LOCATION location,
   const MODBUS_TYPE_DEFAULT& size,
   const MODBUS_TYPE_DEFAULT& address,
   const MODBUS_TYPE_DEFAULT& length) {
