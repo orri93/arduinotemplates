@@ -116,12 +116,12 @@
 #define MODBUS_HALF_SILENCE_MULTIPLIER                           3
 #define MODBUS_FULL_SILENCE_MULTIPLIER                           7
 
-#define MODBUS_READ_UINT16_AT0(arr) word(*arr, *(arr + 1))
+#define MODBUS_READ_UINT16_AT0(arr) word(*(arr), *(arr + 1))
 #define MODBUS_READ_UINT16(arr, index) word(arr[index], arr[index + 1])
 #define MODBUS_READ_READCRC(arr, length) word(arr[(length - MODBUS_CRC_LENGTH) \
   + 1], arr[length - MODBUS_CRC_LENGTH])
-#define MODBUS_WRITE_UINT16_AT0(arr,val) *arr = highByte(val); \
-  *(arr + 1) = lowByte(val)
+#define MODBUS_WRITE_UINT16_AT0(arr,val) *(arr) = highByte((val)); \
+  *((arr) + 1) = lowByte((val))
 
 #define MODBUS_TYPE_DEFAULT                               uint16_t
 #define MODBUS_TYPE_LOCATION                               int32_t
@@ -1151,7 +1151,9 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
   if ((location -= address) >= 0) {
     T index = ::gos::atl::modbus::index::access::registers<T>(
       variable, request, static_cast<T>(location));
-    return request.Buffer + index;
+    if (index > 0) {
+      return request.Buffer + index;
+    }
   }
   return nullptr;
 }
@@ -1166,7 +1168,9 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
   if ((location - address) >= 0 && location + size <= address + length) {
     T index = ::gos::atl::modbus::index::access::registers<T>(
       variable, request, location - address);
-    return request.Buffer + index;
+    if (index > 0) {
+      return request.Buffer + index;
+    }
   }
   return nullptr;
 }
@@ -1235,7 +1239,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
     T index;
     MODBUS_TYPE_RESULT res = ::gos::atl::modbus::index::provide::registers<T>(
       variable, request, static_cast<T>(location), index);
-    if (res == MODBUS_STATUS_OK) {
+    if (res == MODBUS_STATUS_OK && index > 0) {
       return response.Buffer + index;
     }
   }
@@ -1254,7 +1258,7 @@ template<typename T = MODBUS_TYPE_DEFAULT> MODBUS_TYPE_BUFFER* location(
     T index;
     MODBUS_TYPE_RESULT res = ::gos::atl::modbus::index::provide::registers<T>(
       variable, request, static_cast<T>(location - address), index);
-    if (res == MODBUS_STATUS_OK) {
+    if (res == MODBUS_STATUS_OK && index > 0) {
       return response.Buffer + index;
     }
   }
