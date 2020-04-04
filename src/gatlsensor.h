@@ -41,6 +41,7 @@ protected:
         Value = Range.highest;
       return Last = ::gos::atl::sensor::Status::AboveRange;
     }
+    return Last = ::gos::atl::sensor::Status::Undefined;
   }
 };
 
