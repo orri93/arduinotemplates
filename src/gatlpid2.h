@@ -1,5 +1,5 @@
-#ifndef _GOS_ARDUINO_TEMPLATE_LIBRARY_PID_H_
-#define _GOS_ARDUINO_TEMPLATE_LIBRARY_PID_H_
+#ifndef _GOS_ARDUINO_TEMPLATE_LIBRARY_PID2_H_
+#define _GOS_ARDUINO_TEMPLATE_LIBRARY_PID2_H_
 
 #include <Arduino.h>
 
@@ -36,13 +36,66 @@ template<typename T> T Ti(const T& kp, const T& ki) {
 template<typename T> T Td(const T& kp, const T& kd) {
   return T(1000) * kd / kp;
 }
+}
+namespace seconds {
+template<typename T> T Ki(const T& gain, const T& ti) {
+  return gain / ti;
+}
+template<typename T> T Kd(const T& gain, const T& td) {
+  return gain * td;
+}
+template<typename T> T Ti(const T& kp, const T& ki) {
+  return kp / ki;
+}
+template<typename T> T Td(const T& kp, const T& kd) {
+  return kd / kp;
+}
+}
+namespace minutes {
+template<typename T> T Ki(const T& gain, const T& ti) {
+  return gain / (T(60) * ti);
+}
+template<typename T> T Kd(const T& gain, const T& td) {
+  return gain * (T(60) * td);
+}
+template<typename T> T Ti(const T& kp, const T& ki) {
+  return (kp / ki) / T(60);
+}
+template<typename T> T Td(const T& kp, const T& kd) {
+  return (kd / kp) / T(60);
+}
+}
+}
+
+namespace br3ttb {
+
+/* For reverse flip the signs for Kp, Ki, Kd */
+template<typename I, typename O = I, typename P = I>
+struct Parameter {
+  ::gos::atl::type::range<O> Range;
+  I Setpoint;
+  P Time;
+  P Kp;
+  bool PonE;
+};
+
+template<typename V>
+struct Variable {
+  V LastInput;
+  V KiTimesTime;      /* Ki * sample time */
+  V KdDividedByTime;  /* Kd / sample time */
+  V OutputSum;
+};
+
+namespace time {
+namespace milliseconds {
 template<typename V, typename I = V, typename O = V, typename P = V>
 void tunings(
   Variable<V>& variable,
   const Parameter<I, O, P>& parameter,
   const P& ki,
   const P& kd) {
-  variable.KiTimesTime = static_cast<V>(ki * (parameter.Time/ P(1000)));
+  variable.KiTimesTime = static_cast<V>(ki * (parameter.Time / P(1000)));
   variable.KdDividedByTime = static_cast<V>(kd / (parameter.Time / P(1000)));
 }
 template<typename V, typename I = V, typename O = V, typename P = V>
@@ -65,18 +118,6 @@ void tunings(
 }
 }
 namespace seconds {
-template<typename T> T Ki(const T& gain, const T& ti) {
-  return gain / ti;
-}
-template<typename T> T Kd(const T& gain, const T& td) {
-  return gain * td;
-}
-template<typename T> T Ti(const T& kp, const T& ki) {
-  return kp / ki;
-}
-template<typename T> T Td(const T& kp, const T& kd) {
-  return kd / kp;
-}
 template<typename V, typename I = V, typename O = V, typename P = V>
 void tunings(
   Variable<V>& variable,
@@ -106,18 +147,6 @@ void tunings(
 }
 }
 namespace minutes {
-template<typename T> T Ki(const T& gain, const T& ti) {
-  return gain / (T(60) * ti);
-}
-template<typename T> T Kd(const T& gain, const T& td) {
-  return gain * (T(60) * td);
-}
-template<typename T> T Ti(const T& kp, const T& ki) {
-  return (kp / ki) / T(60);
-}
-template<typename T> T Td(const T& kp, const T& kd) {
-  return (kd / kp) / T(60);
-}
 template<typename V, typename I = V, typename O = V, typename P = V>
 void tunings(
   Variable<V>& variable,
@@ -147,26 +176,6 @@ void tunings(
 }
 }
 }
-
-namespace br3ttb {
-
-/* For reverse flip the signs for Kp, Ki, Kd */
-template<typename I, typename O = I, typename P = I>
-struct Parameter {
-  ::gos::atl::type::range<O> Range;
-  I Setpoint;
-  P Time;
-  P Kp;
-  bool PonE;
-};
-
-template<typename V>
-struct Variable {
-  V LastInput;
-  V KiTimesTime;      /* Ki * sample time */
-  V KdDividedByTime;  /* Kd / sample time */
-  V OutputSum;
-};
 
 template<typename V, typename I = V, typename O = V> void initialize(
   Variable<V>& variable,
@@ -204,7 +213,7 @@ O compute(
 
 namespace wiki {
 /* For reverse flip the signs for Kp, Ki, Kd */
-template<typename T, typename O = I, typename P = I>
+template<typename T, typename O = T, typename P = T>
 struct Parameter {
   ::gos::atl::type::range<O> Range;
   T Setpoint;
@@ -226,7 +235,7 @@ void initialize(Variable<V>& variable) {
   variable.Integral = V();
 }
 
-template<typename T, typename O = I, typename P = I, typename V = I>
+template<typename T, typename O = T, typename P = T, typename V = T>
 O compute(
   const T& input,
   Variable<V>& variable,
@@ -234,14 +243,14 @@ O compute(
   const Tune<V>& tune) {
   /* Calculate error and delta input */
   variable.Error = static_cast<V>(parameter.Setpoint - input);
-  variable.Integral += variable.error * static_cast<V>(parameter.Time);
+  variable.Integral += variable.Error * static_cast<V>(parameter.Time);
   variable.Derivative = (variable.Error - variable.LastError) /
     static_cast<V>(parameter.Time);
-  variable.LastError = error;
-  return static_cast<O>(
-    static_cast<V>(parameter.Kp) * variable.Error +
-    static_cast<V>(tune.Ki) * variable.Integral +
-    static_cast<V>(tune.Kd) * variable.Derivative);
+  variable.LastError = variable.Error;
+  return ::gos::atl::utility::range::restrict<O>(static_cast<O>(
+    (static_cast<V>(parameter.Kp) * variable.Error) +
+    (static_cast<V>(tune.Ki) * variable.Integral) +
+    (static_cast<V>(tune.Kd) * variable.Derivative)), parameter.Range);
 }
 
 }
@@ -250,4 +259,4 @@ O compute(
 }
 }
 
-#endif /* _GOS_ARDUINO_TEMPLATE_LIBRARY_PID_H_ */
+#endif /* _GOS_ARDUINO_TEMPLATE_LIBRARY_PID2_H_ */
