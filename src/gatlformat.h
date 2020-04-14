@@ -197,7 +197,7 @@ template<typename S = uint8_t> void message(
 }
 
 template<typename S = uint8_t, typename C = char>
-void space(Holder<S, C>& buffer) {
+void space(buffer::Holder<S, C>& buffer) {
   ::gos::atl::buffer::set(buffer, 32);
   buffer[buffer.Size - 1] = '\0';
 }
