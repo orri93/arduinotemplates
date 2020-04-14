@@ -196,9 +196,16 @@ template<typename S = uint8_t> void message(
   memcpy(pointer, message, size);
 }
 
+template<typename S = uint8_t, typename C = char>
+void space(Holder<S, C>& buffer) {
+  ::gos::atl::buffer::set(buffer, 32);
+  buffer[buffer.Size - 1] = '\0';
 }
 
-}
-}
+} // namespace format
+
+} // namespace atl
+} // namespace gos
+
 
 #endif /* _GOS_ARDUINO_TEMPLATE_LIBRARY_FORMAT_H_ */
